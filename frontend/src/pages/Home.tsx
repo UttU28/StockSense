@@ -1,0 +1,668 @@
+import { useState } from "react";
+import { motion } from "framer-motion";
+import { 
+  TrendingUp, 
+  BarChart3, 
+  Search, 
+  DollarSign,
+  TrendingDown,
+  AlertCircle,
+  CheckCircle2,
+  Loader2
+} from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Badge } from "@/components/ui/badge";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+  SelectGroup,
+  SelectLabel,
+} from "@/components/ui/select";
+import { useToast } from "@/hooks/use-toast";
+import { api, AnalyzeResponse, BacktestResponse, ScanResponse, Opportunity } from "@/lib/api";
+import { STOCKS, getStocksByCategory, WATCHLISTS } from "@/lib/stocks";
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar } from "recharts";
+
+export default function Home() {
+  const [activeTab, setActiveTab] = useState("analyze");
+  const [symbol, setSymbol] = useState("AAPL");
+  const [accountSize, setAccountSize] = useState(10000);
+  const [days, setDays] = useState(100);
+  const [watchlist, setWatchlist] = useState("AAPL,TSLA,NVDA,MSFT,AMZN");
+  
+  const [analyzeData, setAnalyzeData] = useState<AnalyzeResponse | null>(null);
+  const [backtestData, setBacktestData] = useState<BacktestResponse | null>(null);
+  const [scanData, setScanData] = useState<ScanResponse | null>(null);
+  
+  const [loading, setLoading] = useState(false);
+  const { toast } = useToast();
+
+  const handleAnalyze = async () => {
+    if (!symbol.trim()) {
+      toast({
+        title: "Error",
+        description: "Please enter a symbol",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const data = await api.analyze({
+        symbol: symbol.toUpperCase(),
+        account_size: accountSize,
+      });
+      setAnalyzeData(data);
+      toast({
+        title: "Success",
+        description: `Analysis completed for ${data.symbol}`,
+      });
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to analyze symbol",
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleBacktest = async () => {
+    if (!symbol.trim()) {
+      toast({
+        title: "Error",
+        description: "Please enter a symbol",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const data = await api.backtest({
+        symbol: symbol.toUpperCase(),
+        account_size: accountSize,
+        days: days,
+      });
+      setBacktestData(data);
+      toast({
+        title: "Success",
+        description: `Backtest completed for ${data.symbol}`,
+      });
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to run backtest",
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleScan = async () => {
+    setLoading(true);
+    try {
+      const symbols = watchlist.split(",").map(s => s.trim().toUpperCase()).filter(Boolean);
+      const data = await api.scan({
+        symbols: symbols.length > 0 ? symbols : undefined,
+        account_size: accountSize,
+      });
+      setScanData(data);
+      toast({
+        title: "Success",
+        description: `Found ${data.count} opportunities`,
+      });
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to scan market",
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const getBiasColor = (bias: string) => {
+    switch (bias) {
+      case "BULLISH":
+        return "bg-green-500/20 text-green-400 border-green-500/30";
+      case "BEARISH":
+        return "bg-red-500/20 text-red-400 border-red-500/30";
+      default:
+        return "bg-gray-500/20 text-gray-400 border-gray-500/30";
+    }
+  };
+
+  const getTierColor = (tier: string) => {
+    switch (tier) {
+      case "S":
+        return "bg-purple-500/20 text-purple-400 border-purple-500/30";
+      case "A":
+        return "bg-blue-500/20 text-blue-400 border-blue-500/30";
+      case "B":
+        return "bg-yellow-500/20 text-yellow-400 border-yellow-500/30";
+      default:
+        return "bg-gray-500/20 text-gray-400 border-gray-500/30";
+    }
+  };
+
+  return (
+    <div className="min-h-screen p-6 md:p-12 lg:p-16 max-w-7xl mx-auto space-y-8">
+      {/* Header */}
+      <motion.div
+        initial={{ opacity: 0, y: -20 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="space-y-4"
+      >
+        <h1 className="text-4xl md:text-5xl font-bold font-display bg-gradient-to-br from-white to-white/60 bg-clip-text text-transparent">
+          GS Trading System
+        </h1>
+        <p className="text-muted-foreground text-lg max-w-2xl">
+          Analyze stocks, run backtests, and scan the market for trading opportunities using advanced technical analysis.
+        </p>
+      </motion.div>
+
+      {/* Main Tabs */}
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
+        <TabsList className="grid w-full grid-cols-3">
+          <TabsTrigger value="analyze" className="flex items-center gap-2">
+            <TrendingUp className="w-4 h-4" />
+            Analyze
+          </TabsTrigger>
+          <TabsTrigger value="backtest" className="flex items-center gap-2">
+            <BarChart3 className="w-4 h-4" />
+            Backtest
+          </TabsTrigger>
+          <TabsTrigger value="scan" className="flex items-center gap-2">
+            <Search className="w-4 h-4" />
+            Scan Market
+          </TabsTrigger>
+        </TabsList>
+
+        {/* Analyze Tab */}
+        <TabsContent value="analyze" className="space-y-6">
+          <Card>
+            <CardHeader>
+              <CardTitle>Stock Analysis</CardTitle>
+              <CardDescription>Get detailed technical analysis and trading signals</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="flex gap-4 items-end">
+                <div className="flex-1 space-y-2">
+                  <Label htmlFor="analyze-symbol">Stock Symbol</Label>
+                  <Select value={symbol} onValueChange={setSymbol}>
+                    <SelectTrigger id="analyze-symbol">
+                      <SelectValue placeholder="Select a stock" />
+                    </SelectTrigger>
+                    <SelectContent className="max-h-[300px]">
+                      {Object.entries(getStocksByCategory()).map(([category, stocks]) => (
+                        <SelectGroup key={category}>
+                          <SelectLabel>{category}</SelectLabel>
+                          {stocks.map((stock) => (
+                            <SelectItem key={stock.symbol} value={stock.symbol}>
+                              {stock.symbol} - {stock.name}
+                            </SelectItem>
+                          ))}
+                        </SelectGroup>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="w-40 space-y-2">
+                  <Label htmlFor="analyze-account">Account Size ($)</Label>
+                  <Input
+                    id="analyze-account"
+                    type="number"
+                    placeholder="10000"
+                    value={accountSize}
+                    onChange={(e) => setAccountSize(Number(e.target.value))}
+                  />
+                </div>
+                <Button onClick={handleAnalyze} disabled={loading} className="mb-0">
+                  {loading ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <TrendingUp className="w-4 h-4 mr-2" />}
+                  Analyze
+                </Button>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                <strong>Required:</strong> Account size is used to calculate position sizing and risk management (1% risk per trade). Default: $10,000.
+              </p>
+
+              {loading && (
+                <div className="space-y-4">
+                  <Skeleton className="h-32 w-full" />
+                  <Skeleton className="h-32 w-full" />
+                </div>
+              )}
+
+              {analyzeData && (
+                <motion.div
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="space-y-6"
+                >
+                  {/* Summary Cards */}
+                  <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                    <Card>
+                      <CardContent className="pt-6">
+                        <div className="text-sm text-muted-foreground">Current Price</div>
+                        <div className="text-2xl font-bold">${analyzeData.analysis.current_price?.toFixed(2)}</div>
+                      </CardContent>
+                    </Card>
+                    <Card>
+                      <CardContent className="pt-6">
+                        <div className="text-sm text-muted-foreground">Bias</div>
+                        <Badge className={getBiasColor(analyzeData.analysis.bias.bias)}>
+                          {analyzeData.analysis.bias.bias}
+                        </Badge>
+                      </CardContent>
+                    </Card>
+                    <Card>
+                      <CardContent className="pt-6">
+                        <div className="text-sm text-muted-foreground">Entry Confidence</div>
+                        <div className="text-2xl font-bold">{analyzeData.analysis.plan.entry_analysis.entry_confidence}/100</div>
+                      </CardContent>
+                    </Card>
+                    <Card>
+                      <CardContent className="pt-6">
+                        <div className="text-sm text-muted-foreground">Tier</div>
+                        <Badge className={getTierColor(analyzeData.analysis.plan.entry_analysis.tier)}>
+                          Tier {analyzeData.analysis.plan.entry_analysis.tier}
+                        </Badge>
+                      </CardContent>
+                    </Card>
+                  </div>
+
+                  {/* Technical Indicators */}
+                  <Card>
+                    <CardHeader>
+                      <CardTitle>Technical Indicators</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                        <div>
+                          <div className="text-sm text-muted-foreground">RSI (14)</div>
+                          <div className="text-xl font-semibold">{analyzeData.analysis.features.daily_rsi?.toFixed(2) || "N/A"}</div>
+                        </div>
+                        <div>
+                          <div className="text-sm text-muted-foreground">MACD Regime</div>
+                          <div className="text-xl font-semibold">{analyzeData.analysis.features.daily_macd_regime || "N/A"}</div>
+                        </div>
+                        <div>
+                          <div className="text-sm text-muted-foreground">ATR (14)</div>
+                          <div className="text-xl font-semibold">{analyzeData.analysis.features.atr_14?.toFixed(2) || "N/A"}</div>
+                        </div>
+                        <div>
+                          <div className="text-sm text-muted-foreground">Structure</div>
+                          <div className="text-xl font-semibold">{analyzeData.analysis.features.structure_score || "N/A"}</div>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+
+                  {/* Position Sizing */}
+                  <Card>
+                    <CardHeader>
+                      <CardTitle>Position Sizing</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                        <div>
+                          <div className="text-sm text-muted-foreground">Units</div>
+                          <div className="text-xl font-semibold">{analyzeData.position.units}</div>
+                        </div>
+                        <div>
+                          <div className="text-sm text-muted-foreground">Stop Loss</div>
+                          <div className="text-xl font-semibold">${analyzeData.position.stop.toFixed(2)}</div>
+                        </div>
+                        <div>
+                          <div className="text-sm text-muted-foreground">Take Profit (1R)</div>
+                          <div className="text-xl font-semibold">${analyzeData.position.take_profit_1r.toFixed(2)}</div>
+                        </div>
+                        <div>
+                          <div className="text-sm text-muted-foreground">Take Profit (2R)</div>
+                          <div className="text-xl font-semibold">${analyzeData.position.take_profit_1.toFixed(2)}</div>
+                        </div>
+                      </div>
+                      <div className="mt-4 pt-4 border-t">
+                        <div className="text-sm text-muted-foreground">Risk Amount</div>
+                        <div className="text-2xl font-bold text-yellow-400">${analyzeData.position.risk_amount.toFixed(2)}</div>
+                      </div>
+                    </CardContent>
+                  </Card>
+
+                  {/* Entry Analysis */}
+                  <Card>
+                    <CardHeader>
+                      <CardTitle>Entry Analysis</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="space-y-2">
+                        <div className="flex items-center gap-2">
+                          {analyzeData.analysis.plan.entry_analysis.entry_allowed ? (
+                            <CheckCircle2 className="w-5 h-5 text-green-400" />
+                          ) : (
+                            <AlertCircle className="w-5 h-5 text-red-400" />
+                          )}
+                          <span className="font-semibold">
+                            Entry: {analyzeData.analysis.plan.entry_analysis.entry_allowed ? "ALLOWED" : "WAIT"}
+                          </span>
+                        </div>
+                        <div className="text-sm text-muted-foreground">
+                          Checklist: {analyzeData.analysis.plan.entry_analysis.checklist.join(", ")}
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                </motion.div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* Backtest Tab */}
+        <TabsContent value="backtest" className="space-y-6">
+          <Card>
+            <CardHeader>
+              <CardTitle>Backtest Strategy</CardTitle>
+              <CardDescription>Test your strategy on historical data</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="flex gap-4 items-end">
+                <div className="flex-1 space-y-2">
+                  <Label htmlFor="backtest-symbol">Stock Symbol</Label>
+                  <Select value={symbol} onValueChange={setSymbol}>
+                    <SelectTrigger id="backtest-symbol">
+                      <SelectValue placeholder="Select a stock" />
+                    </SelectTrigger>
+                    <SelectContent className="max-h-[300px]">
+                      {Object.entries(getStocksByCategory()).map(([category, stocks]) => (
+                        <SelectGroup key={category}>
+                          <SelectLabel>{category}</SelectLabel>
+                          {stocks.map((stock) => (
+                            <SelectItem key={stock.symbol} value={stock.symbol}>
+                              {stock.symbol} - {stock.name}
+                            </SelectItem>
+                          ))}
+                        </SelectGroup>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="w-40 space-y-2">
+                  <Label htmlFor="backtest-account">Account Size ($)</Label>
+                  <Input
+                    id="backtest-account"
+                    type="number"
+                    placeholder="10000"
+                    value={accountSize}
+                    onChange={(e) => setAccountSize(Number(e.target.value))}
+                  />
+                </div>
+                <div className="w-32 space-y-2">
+                  <Label htmlFor="backtest-days">Days</Label>
+                  <Input
+                    id="backtest-days"
+                    type="number"
+                    placeholder="100"
+                    value={days}
+                    onChange={(e) => setDays(Number(e.target.value))}
+                  />
+                </div>
+                <Button onClick={handleBacktest} disabled={loading} className="mb-0">
+                  {loading ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <BarChart3 className="w-4 h-4 mr-2" />}
+                  Backtest
+                </Button>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                <strong>Required:</strong> Account size is the starting capital for backtesting. Days determines how many days of historical data to test. Default: $10,000 and 100 days.
+              </p>
+
+              {loading && (
+                <div className="space-y-4">
+                  <Skeleton className="h-64 w-full" />
+                </div>
+              )}
+
+              {backtestData && (
+                <motion.div
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="space-y-6"
+                >
+                  {/* Results Summary */}
+                  <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                    <Card>
+                      <CardContent className="pt-6">
+                        <div className="text-sm text-muted-foreground">Total Trades</div>
+                        <div className="text-2xl font-bold">{backtestData.results.total_trades}</div>
+                      </CardContent>
+                    </Card>
+                    <Card>
+                      <CardContent className="pt-6">
+                        <div className="text-sm text-muted-foreground">Win Rate</div>
+                        <div className="text-2xl font-bold">{backtestData.results.win_rate.toFixed(1)}%</div>
+                      </CardContent>
+                    </Card>
+                    <Card>
+                      <CardContent className="pt-6">
+                        <div className="text-sm text-muted-foreground">Total PnL</div>
+                        <div className={`text-2xl font-bold ${backtestData.results.total_pnl >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                          ${backtestData.results.total_pnl.toFixed(2)}
+                        </div>
+                      </CardContent>
+                    </Card>
+                    <Card>
+                      <CardContent className="pt-6">
+                        <div className="text-sm text-muted-foreground">Final Equity</div>
+                        <div className="text-2xl font-bold">${backtestData.results.final_equity.toFixed(2)}</div>
+                      </CardContent>
+                    </Card>
+                  </div>
+
+                  {/* Equity Curve Chart */}
+                  {backtestData.results.trades.length > 0 && (
+                    <Card>
+                      <CardHeader>
+                        <CardTitle>Trade Performance</CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        <ResponsiveContainer width="100%" height={300}>
+                          <BarChart data={backtestData.results.trades}>
+                            <CartesianGrid strokeDasharray="3 3" />
+                            <XAxis dataKey="entry_date" />
+                            <YAxis />
+                            <Tooltip />
+                            <Bar dataKey="pnl" fill="#8884d8" />
+                          </BarChart>
+                        </ResponsiveContainer>
+                      </CardContent>
+                    </Card>
+                  )}
+
+                  {/* Trade Log */}
+                  <Card>
+                    <CardHeader>
+                      <CardTitle>Trade Log</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="space-y-2">
+                        {backtestData.results.trades.map((trade, idx) => (
+                          <div key={idx} className="flex items-center justify-between p-3 border rounded-lg">
+                            <div>
+                              <div className="font-semibold">{trade.entry_date} → {trade.exit_date}</div>
+                              <div className="text-sm text-muted-foreground">{trade.reason}</div>
+                            </div>
+                            <div className="text-right">
+                              <div className={`font-bold ${trade.pnl >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                                ${trade.pnl.toFixed(2)}
+                              </div>
+                              <div className="text-sm text-muted-foreground">{trade.return_pct.toFixed(2)}%</div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </CardContent>
+                  </Card>
+                </motion.div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* Scan Tab */}
+        <TabsContent value="scan" className="space-y-6">
+          <Card>
+            <CardHeader>
+              <CardTitle>Market Scanner</CardTitle>
+              <CardDescription>Scan multiple stocks for trading opportunities</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="space-y-3">
+                <div className="flex gap-4 items-end">
+                  <div className="flex-1 space-y-2">
+                    <Label htmlFor="scan-symbols">Stock Symbols</Label>
+                    <Input
+                      id="scan-symbols"
+                      placeholder="AAPL,TSLA,NVDA,MSFT,AMZN"
+                      value={watchlist}
+                      onChange={(e) => setWatchlist(e.target.value)}
+                    />
+                  </div>
+                  <div className="w-40 space-y-2">
+                    <Label htmlFor="scan-account">Account Size ($)</Label>
+                    <Input
+                      id="scan-account"
+                      type="number"
+                      placeholder="10000"
+                      value={accountSize}
+                      onChange={(e) => setAccountSize(Number(e.target.value))}
+                    />
+                  </div>
+                  <Button onClick={handleScan} disabled={loading} className="mb-0">
+                    {loading ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Search className="w-4 h-4 mr-2" />}
+                    Scan
+                  </Button>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Enter comma-separated stock symbols or use quick select buttons below. <strong>Required:</strong> Account size is used for position sizing calculations. Default: $10,000.
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  <span className="text-sm text-muted-foreground self-center">Quick select:</span>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setWatchlist(WATCHLISTS.tech.join(","))}
+                  >
+                    Tech
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setWatchlist(WATCHLISTS.finance.join(","))}
+                  >
+                    Finance
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setWatchlist(WATCHLISTS.healthcare.join(","))}
+                  >
+                    Healthcare
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setWatchlist(WATCHLISTS.popular.join(","))}
+                  >
+                    Popular
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setWatchlist(WATCHLISTS.crypto.join(","))}
+                  >
+                    Crypto
+                  </Button>
+                </div>
+              </div>
+
+              {loading && (
+                <div className="space-y-4">
+                  <Skeleton className="h-32 w-full" />
+                  <Skeleton className="h-32 w-full" />
+                </div>
+              )}
+
+              {scanData && (
+                <motion.div
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="space-y-4"
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="text-lg font-semibold">
+                      Found {scanData.count} Opportunities
+                    </div>
+                    <Badge variant="outline">{scanData.watchlist.length} symbols scanned</Badge>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {scanData.opportunities.map((opp: Opportunity, idx: number) => (
+                      <Card key={idx}>
+                        <CardHeader>
+                          <div className="flex items-center justify-between">
+                            <CardTitle className="text-xl">{opp.symbol}</CardTitle>
+                            <Badge className={getBiasColor(opp.bias)}>{opp.bias}</Badge>
+                          </div>
+                        </CardHeader>
+                        <CardContent className="space-y-3">
+                          <div className="flex items-center justify-between">
+                            <span className="text-sm text-muted-foreground">Confidence</span>
+                            <span className="text-lg font-bold">{opp.confidence}/100</span>
+                          </div>
+                          <div className="flex items-center justify-between">
+                            <span className="text-sm text-muted-foreground">Price</span>
+                            <span className="text-lg font-semibold">${opp.current_price?.toFixed(2)}</span>
+                          </div>
+                          <div className="flex items-center justify-between">
+                            <span className="text-sm text-muted-foreground">Units</span>
+                            <span className="text-lg font-semibold">{opp.units}</span>
+                          </div>
+                          <div className="pt-2 border-t">
+                            <div className="text-xs text-muted-foreground mb-1">Strategy</div>
+                            <div className="text-sm font-medium">{opp.strategy}</div>
+                          </div>
+                          <div className="text-xs text-muted-foreground">
+                            {opp.reason}
+                          </div>
+                        </CardContent>
+                      </Card>
+                    ))}
+                  </div>
+
+                  {scanData.opportunities.length === 0 && (
+                    <div className="text-center py-12 text-muted-foreground">
+                      No opportunities found. Try different symbols or check back later.
+                    </div>
+                  )}
+                </motion.div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+      </Tabs>
+    </div>
+  );
+}
