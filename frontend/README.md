@@ -23,10 +23,10 @@ npm install
 Create a `.env` file in the frontend directory:
 
 ```env
-VITE_API_URL=http://localhost:8000
+VITE_API_URL=http://localhost:8001
 ```
 
-Or the API URL will default to `http://localhost:8000` if not set.
+Or the API URL will default to `http://localhost:8001` if not set.
 
 ### 3. Start Development Server
 
@@ -45,7 +45,7 @@ Before using the frontend, ensure the FastAPI backend is running:
 python app.py
 ```
 
-The backend should be running at `http://localhost:8000`.
+The backend should be running at `http://localhost:8001`.
 
 ## Usage
 

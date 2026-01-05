@@ -1,2 +1,31 @@
 __pycache__/
 env/
+venv/
+*.pyc
+*.pyo
+*.pyd
+.Python
+
+# PM2
+ecosystem.*.config.js
+ecosystem.*.config.cjs
+start_backend.sh
+start_frontend.sh
+logs/
+*.log
+.pm2/
+
+# Frontend build
+frontend/dist/
+frontend/node_modules/
+
+# Backend cache
+backend/cache/
+backend/gs_data.db
+
+# Environment variables
+.env
+.env.local
+
+# Nginx logs (if stored in project)
+nginx/*.log

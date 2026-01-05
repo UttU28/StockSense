@@ -69,8 +69,8 @@ python app.py
 ```
 
 The API will be available at:
-- **API**: http://localhost:8000
-- **Interactive Docs**: http://localhost:8000/docs
+- **API**: http://localhost:8001
+- **Interactive Docs**: http://localhost:8001/docs
 
 See [API_README.md](API_README.md) for complete API documentation and examples.
 
