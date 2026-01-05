@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 from typing import Optional, List, Dict, Any
@@ -8,7 +8,6 @@ from dataclasses import asdict
 from main import analyze_symbol, backtest_symbol, scan_market
 from models import SymbolState
 
-# Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
@@ -18,7 +17,6 @@ app = FastAPI(
     version="1.0.0"
 )
 
-# CORS middleware
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
@@ -34,7 +32,6 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Request Models
 class AnalyzeRequest(BaseModel):
     symbol: str = Field(..., description="Stock symbol (e.g., AAPL)")
     account_size: float = Field(10000, description="Account size for position sizing")
@@ -48,7 +45,6 @@ class ScanRequest(BaseModel):
     symbols: Optional[List[str]] = Field(None, description="Custom watchlist (default used if not provided)")
     account_size: float = Field(10000, description="Account size for position sizing")
 
-# Helper function to convert SymbolState to dict
 def state_to_dict(state: SymbolState) -> Dict[str, Any]:
     """Convert SymbolState to JSON-serializable dict"""
     if state is None:
@@ -64,9 +60,8 @@ def state_to_dict(state: SymbolState) -> Dict[str, Any]:
         "plan": state.plan,
     }
     
-    # Convert daily bars
     if state.daily_bars:
-        result["daily_bars"] = [asdict(bar) for bar in state.daily_bars[:5]]  # Last 5 bars
+        result["daily_bars"] = [asdict(bar) for bar in state.daily_bars[:5]]
         result["current_price"] = state.daily_bars[0].close if state.daily_bars else None
     
     return result
@@ -95,8 +90,6 @@ async def analyze(request: AnalyzeRequest):
     """
     try:
         symbol = request.symbol.upper()
-        logger.info(f"Analyzing {symbol} with account size ${request.account_size}")
-        
         state, position_result = analyze_symbol(symbol, request.account_size, silent=True)
         
         if state is None or position_result is None:
@@ -127,13 +120,9 @@ async def backtest(request: BacktestRequest):
     """
     try:
         symbol = request.symbol.upper()
-        logger.info(f"Backtesting {symbol} for {request.days} days with account ${request.account_size}")
-        
-        # Import Backtester directly to use custom days
         from backtester import Backtester
         from data_layer import DataLayer
         
-        # Fetch data
         dl = DataLayer()
         state = dl.fetch_symbol_data(symbol)
         
@@ -143,7 +132,6 @@ async def backtest(request: BacktestRequest):
                 detail=f"Failed to fetch data for symbol {symbol}"
             )
         
-        # Run backtest
         bt = Backtester(start_days_ago=request.days, account_size=request.account_size)
         results = bt.run_backtest(state)
         
@@ -173,13 +161,6 @@ async def scan(request: ScanRequest):
     """
     try:
         symbols_str = None
-        if request.symbols:
-            symbols_str = ",".join([s.upper() for s in request.symbols])
-        
-        logger.info(f"Scanning market with account size ${request.account_size}")
-        
-        # We need to modify scan_market to return data instead of printing
-        # For now, let's create a modified version
         from main import analyze_symbol
         from data_layer import DataLayer
         
@@ -215,7 +196,6 @@ async def scan(request: ScanRequest):
                 logger.warning(f"Error scanning {sym}: {e}")
                 continue
         
-        # Sort by confidence
         opportunities.sort(key=lambda x: x["confidence"], reverse=True)
         
         return {
@@ -255,6 +235,52 @@ async def get_current_price(symbol: str):
         raise
     except Exception as e:
         logger.error(f"Error fetching price for {symbol}: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/symbols/{symbol}/chart")
+async def get_chart_data(symbol: str, days: int = Query(30, ge=1, le=100)):
+    """
+    Get historical price data for charting
+    
+    - **symbol**: Stock ticker symbol
+    - **days**: Number of days of data to return (default: 30, max: 100)
+    """
+    try:
+        from data_layer import DataLayer
+        dl = DataLayer()
+        state = dl.fetch_symbol_data(symbol.upper())
+        
+        if not state.daily_bars:
+            raise HTTPException(status_code=404, detail="Symbol not found")
+        
+        days = min(max(1, days), 100)
+        sorted_bars = sorted(state.daily_bars, key=lambda x: x.date)
+        chart_data = sorted_bars[-days:]
+        
+        chart_points = []
+        for bar in chart_data:
+            chart_points.append({
+                "date": bar.date,
+                "open": bar.open,
+                "high": bar.high,
+                "low": bar.low,
+                "close": bar.close,
+                "volume": bar.volume
+            })
+        
+        return {
+            "success": True,
+            "symbol": symbol.upper(),
+            "days": days,
+            "data": chart_points,
+            "current_price": chart_points[-1]["close"] if chart_points else None,
+            "price_change": chart_points[-1]["close"] - chart_points[0]["close"] if len(chart_points) > 1 else 0,
+            "price_change_pct": ((chart_points[-1]["close"] - chart_points[0]["close"]) / chart_points[0]["close"] * 100) if len(chart_points) > 1 and chart_points[0]["close"] > 0 else 0
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error fetching chart data for {symbol}: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
 if __name__ == "__main__":

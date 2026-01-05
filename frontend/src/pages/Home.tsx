@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { motion } from "framer-motion";
 import { 
   TrendingUp, 
@@ -8,7 +8,8 @@ import {
   TrendingDown,
   AlertCircle,
   CheckCircle2,
-  Loader2
+  Loader2,
+  RefreshCw
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -27,9 +28,9 @@ import {
   SelectLabel,
 } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
-import { api, AnalyzeResponse, BacktestResponse, ScanResponse, Opportunity } from "@/lib/api";
+import { api, AnalyzeResponse, BacktestResponse, ScanResponse, Opportunity, ChartResponse } from "@/lib/api";
 import { STOCKS, getStocksByCategory, WATCHLISTS } from "@/lib/stocks";
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar } from "recharts";
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, Area, AreaChart } from "recharts";
 
 export default function Home() {
   const [activeTab, setActiveTab] = useState("analyze");
@@ -41,8 +42,10 @@ export default function Home() {
   const [analyzeData, setAnalyzeData] = useState<AnalyzeResponse | null>(null);
   const [backtestData, setBacktestData] = useState<BacktestResponse | null>(null);
   const [scanData, setScanData] = useState<ScanResponse | null>(null);
+  const [chartData, setChartData] = useState<ChartResponse | null>(null);
   
   const [loading, setLoading] = useState(false);
+  const [chartLoading, setChartLoading] = useState(false);
   const { toast } = useToast();
 
   const handleAnalyze = async () => {
@@ -56,15 +59,23 @@ export default function Home() {
     }
 
     setLoading(true);
+    setChartLoading(true);
     try {
-      const data = await api.analyze({
-        symbol: symbol.toUpperCase(),
-        account_size: accountSize,
-      });
-      setAnalyzeData(data);
+      const [analysisData, chartDataResult] = await Promise.all([
+        api.analyze({
+          symbol: symbol.toUpperCase(),
+          account_size: accountSize,
+        }),
+        api.getChartData(symbol.toUpperCase(), 30).catch(() => null)
+      ]);
+      
+      setAnalyzeData(analysisData);
+      if (chartDataResult) {
+        setChartData(chartDataResult);
+      }
       toast({
         title: "Success",
-        description: `Analysis completed for ${data.symbol}`,
+        description: `Analysis completed for ${analysisData.symbol}`,
       });
     } catch (error: any) {
       toast({
@@ -74,6 +85,7 @@ export default function Home() {
       });
     } finally {
       setLoading(false);
+      setChartLoading(false);
     }
   };
 
@@ -157,6 +169,14 @@ export default function Home() {
         return "bg-gray-500/20 text-gray-400 border-gray-500/30";
     }
   };
+
+
+  // Auto-load chart when symbol changes in analyze tab
+  useEffect(() => {
+    if (activeTab === "analyze" && symbol && !analyzeData) {
+      handleAnalyze();
+    }
+  }, [activeTab, symbol]);
 
   return (
     <div className="min-h-screen p-6 md:p-12 lg:p-16 max-w-7xl mx-auto space-y-8">
@@ -252,6 +272,60 @@ export default function Home() {
                   animate={{ opacity: 1, y: 0 }}
                   className="space-y-6"
                 >
+
+                
+                  {/* Price Chart */}
+                  {chartData && (
+                    <Card>
+                      <CardHeader>
+                        <CardTitle>{chartData.symbol} Price Chart (30 Days)</CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        <ResponsiveContainer width="100%" height={400}>
+                          <AreaChart data={chartData.data}>
+                            <defs>
+                              <linearGradient id="colorPrice" x1="0" y1="0" x2="0" y2="1">
+                                <stop offset="5%" stopColor="#8884d8" stopOpacity={0.3}/>
+                                <stop offset="95%" stopColor="#8884d8" stopOpacity={0}/>
+                              </linearGradient>
+                            </defs>
+                            <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
+                            <XAxis 
+                              dataKey="date" 
+                              stroke="#9ca3af"
+                              tick={{ fill: '#9ca3af' }}
+                              angle={-45}
+                              textAnchor="end"
+                              height={80}
+                            />
+                            <YAxis 
+                              stroke="#9ca3af"
+                              tick={{ fill: '#9ca3af' }}
+                              domain={['dataMin - 5', 'dataMax + 5']}
+                            />
+                            <Tooltip
+                              contentStyle={{
+                                backgroundColor: '#1f2937',
+                                border: '1px solid #374151',
+                                borderRadius: '8px',
+                                color: '#f3f4f6'
+                              }}
+                              formatter={(value: number) => [`$${value.toFixed(2)}`, 'Price']}
+                              labelStyle={{ color: '#9ca3af' }}
+                            />
+                            <Area
+                              type="monotone"
+                              dataKey="close"
+                              stroke="#8884d8"
+                              fillOpacity={1}
+                              fill="url(#colorPrice)"
+                              strokeWidth={2}
+                            />
+                          </AreaChart>
+                        </ResponsiveContainer>
+                      </CardContent>
+                    </Card>
+                  )}
                   {/* Summary Cards */}
                   <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                     <Card>
@@ -283,6 +357,7 @@ export default function Home() {
                       </CardContent>
                     </Card>
                   </div>
+
 
                   {/* Technical Indicators */}
                   <Card>
@@ -365,6 +440,67 @@ export default function Home() {
                       </div>
                     </CardContent>
                   </Card>
+
+                  {/* OHLC Chart */}
+                  {chartData && (
+                    <Card>
+                      <CardHeader>
+                        <CardTitle>OHLC Chart (Open, High, Low, Close)</CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        <ResponsiveContainer width="100%" height={400}>
+                          <LineChart data={chartData.data}>
+                            <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
+                            <XAxis 
+                              dataKey="date" 
+                              stroke="#9ca3af"
+                              tick={{ fill: '#9ca3af' }}
+                              angle={-45}
+                              textAnchor="end"
+                              height={80}
+                            />
+                            <YAxis 
+                              stroke="#9ca3af"
+                              tick={{ fill: '#9ca3af' }}
+                              domain={['dataMin - 5', 'dataMax + 5']}
+                            />
+                            <Tooltip
+                              contentStyle={{
+                                backgroundColor: '#1f2937',
+                                border: '1px solid #374151',
+                                borderRadius: '8px',
+                                color: '#f3f4f6'
+                              }}
+                              formatter={(value: number) => `$${value.toFixed(2)}`}
+                              labelStyle={{ color: '#9ca3af' }}
+                            />
+                            <Line type="monotone" dataKey="open" stroke="#3b82f6" strokeWidth={2} dot={false} />
+                            <Line type="monotone" dataKey="high" stroke="#10b981" strokeWidth={2} dot={false} />
+                            <Line type="monotone" dataKey="low" stroke="#ef4444" strokeWidth={2} dot={false} />
+                            <Line type="monotone" dataKey="close" stroke="#8884d8" strokeWidth={2} dot={false} />
+                          </LineChart>
+                        </ResponsiveContainer>
+                        <div className="flex gap-4 mt-4 justify-center">
+                          <div className="flex items-center gap-2">
+                            <div className="w-4 h-4 bg-blue-500"></div>
+                            <span className="text-sm text-muted-foreground">Open</span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <div className="w-4 h-4 bg-green-500"></div>
+                            <span className="text-sm text-muted-foreground">High</span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <div className="w-4 h-4 bg-red-500"></div>
+                            <span className="text-sm text-muted-foreground">Low</span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <div className="w-4 h-4 bg-purple-500"></div>
+                            <span className="text-sm text-muted-foreground">Close</span>
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  )}
                 </motion.div>
               )}
             </CardContent>

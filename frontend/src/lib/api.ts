@@ -136,6 +136,25 @@ export interface PriceResponse {
   volume: number;
 }
 
+export interface ChartDataPoint {
+  date: string;
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+  volume: number;
+}
+
+export interface ChartResponse {
+  success: boolean;
+  symbol: string;
+  days: number;
+  data: ChartDataPoint[];
+  current_price: number;
+  price_change: number;
+  price_change_pct: number;
+}
+
 class ApiService {
   private async request<T>(
     endpoint: string,
@@ -180,6 +199,10 @@ class ApiService {
 
   async getPrice(symbol: string): Promise<PriceResponse> {
     return this.request<PriceResponse>(`/symbols/${symbol}/price`);
+  }
+
+  async getChartData(symbol: string, days: number = 30): Promise<ChartResponse> {
+    return this.request<ChartResponse>(`/symbols/${symbol}/chart?days=${days}`);
   }
 
   async healthCheck(): Promise<{ status: string }> {

@@ -32,7 +32,7 @@ class DataLayer:
         conn.close()
 
     def _get_from_cache(self, key: str) -> Optional[Dict[str, Any]]:
-        """Retrieve data from cache if it exists and is fresh (e.g., < 12 hours old)."""
+        """Retrieve data from cache if it exists and is fresh (< 20 hours old)."""
         conn = sqlite3.connect(DB_PATH)
         c = conn.cursor()
         c.execute('SELECT data, timestamp FROM api_cache WHERE key = ?', (key,))
@@ -41,16 +41,9 @@ class DataLayer:
 
         if row:
             data_str, timestamp_str = row
-            # customized freshness check could go here. For now, we trust the cache 
-            # if it exists, assuming daily runs. 
-            # Ideally we'd validte against market close hours, but simple existence is good for now.
-            # Let's enforce a 12 hour expiry for now to be safe.
             cached_time = datetime.fromisoformat(timestamp_str)
-            if datetime.now() - cached_time < timedelta(hours=12):
-                logger.info(f"Cache hit for {key}")
+            if datetime.now() - cached_time < timedelta(hours=20):
                 return json.loads(data_str)
-            else:
-                 logger.info(f"Cache expired for {key}")
         return None
 
     def _save_to_cache(self, key: str, data: Dict[str, Any]):
@@ -65,9 +58,7 @@ class DataLayer:
 
     def _fetch_api(self, function: str, symbol: str, **kwargs) -> Optional[Dict[str, Any]]:
         """Fetch data from Alpha Vantage with caching and rate limiting."""
-        # Create a unique cache key based on params
         params = {"function": function, "symbol": symbol, "apikey": ALPHA_VANTAGE_API_KEY, **kwargs}
-        # Simplify key for readability/debugging
         cache_key = f"{function}_{symbol}_{json.dumps(kwargs, sort_keys=True)}"
         
         cached_data = self._get_from_cache(cache_key)
@@ -87,10 +78,7 @@ class DataLayer:
                 logger.warning(f"API Rate Limit hit for {function} ({symbol}): {data['Note']}")
                 return None
             
-            # Save to cache
             self._save_to_cache(cache_key, data)
-            
-            # Respect rate limit
             time.sleep(CALL_DELAY_SECONDS)
             return data
 
@@ -100,26 +88,16 @@ class DataLayer:
 
     def fetch_symbol_data(self, symbol: str) -> SymbolState:
         """Fetch all required data for a symbol and return a SymbolState object."""
-        
-        # 1. Fetch Daily Data
         daily_json = self._fetch_api("TIME_SERIES_DAILY", symbol, outputsize="compact")
         daily_bars = self._parse_daily_bars(daily_json)
 
-        # 2. Fetch Weekly Data
         weekly_json = self._fetch_api("TIME_SERIES_WEEKLY", symbol)
         weekly_bars = self._parse_weekly_bars(weekly_json)
 
-        # 3. Fetch Indicators
-        # RSI Daily (14)
         rsi_d_json = self._fetch_api("RSI", symbol, interval="daily", time_period=14, series_type="close")
-        # STOCHRSI Daily (14, 5, 3, 1)
         stoch_d_json = self._fetch_api("STOCHRSI", symbol, interval="daily", time_period=14, series_type="close", fastkperiod=5, fastdperiod=3, fastdmatype=1)
-        # MACD Daily (12, 26, 9)
         macd_d_json = self._fetch_api("MACD", symbol, interval="daily", series_type="close")
-        
-        # RSI Weekly (14)
         rsi_w_json = self._fetch_api("RSI", symbol, interval="weekly", time_period=14, series_type="close")
-        # MACD Weekly (12, 26, 9)
         macd_w_json = self._fetch_api("MACD", symbol, interval="weekly", series_type="close")
 
         indicator_set = IndicatorSet(
@@ -130,7 +108,6 @@ class DataLayer:
             weekly_macd=self._parse_technical(macd_w_json, "MACD")
         )
 
-        # 4. Fetch Earnings
         earnings_json = self._fetch_api("EARNINGS", symbol)
         earnings_records = self._parse_earnings(earnings_json)
 
@@ -143,7 +120,6 @@ class DataLayer:
             earnings=earnings_records
         )
 
-    # --- Parsers ---
     def _parse_daily_bars(self, data: Dict) -> List[DailyBar]:
         bars = []
         if not data or "Time Series (Daily)" not in data:
@@ -159,7 +135,7 @@ class DataLayer:
                 close=float(values["4. close"]),
                 volume=int(values["5. volume"])
             ))
-        return bars # Alpha Vantage returns newest first
+        return bars
 
     def _parse_weekly_bars(self, data: Dict) -> List[WeeklyBar]:
         bars = []
@@ -180,11 +156,9 @@ class DataLayer:
 
     def _parse_technical(self, data: Dict, indicator_key: str) -> Dict:
         """Generic parser for technical indicators."""
-        # key typically "Technical Analysis: RSI" or "Technical Analysis: MACD"
         if not data:
             return {}
         
-        # Find the key that starts with "Technical Analysis"
         main_key = next((k for k in data.keys() if "Technical Analysis" in k), None)
         if not main_key:
             return {}
@@ -192,12 +166,9 @@ class DataLayer:
         result = {}
         ts = data[main_key]
         for date_str, values in ts.items():
-            # For singe value like RSI: {"RSI": "50.0"} -> 50.0
-            # For multi value like MACD: {"MACD": "...", "MACD_Signal": "...", ...} -> dict
             if len(values) == 1 and indicator_key in values:
                  result[date_str] = float(values[indicator_key])
             else:
-                # Store as dict of floats
                 result[date_str] = {k: float(v) for k, v in values.items()}
         return result
 
