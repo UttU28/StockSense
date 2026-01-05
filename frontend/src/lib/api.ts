@@ -205,9 +205,36 @@ class ApiService {
     return this.request<ChartResponse>(`/symbols/${symbol}/chart?days=${days}`);
   }
 
+  async getOptionsData(symbol: string): Promise<OptionsResponse> {
+    return this.request<OptionsResponse>(`/symbols/${symbol}/options`);
+  }
+
   async healthCheck(): Promise<{ status: string }> {
     return this.request<{ status: string }>('/health');
   }
+}
+
+export interface OptionsResponse {
+  success: boolean;
+  symbol: string;
+  current_price: number;
+  atr: number;
+  chains: {
+    current_price: number;
+    expiration_date: string;
+    days_to_expiry: number;
+    volatility: number;
+    options: {
+      strike: number;
+      call_price: number;
+      put_price: number;
+      call_intrinsic: number;
+      put_intrinsic: number;
+      call_time_value: number;
+      put_time_value: number;
+      moneyness: number;
+    }[];
+  }[];
 }
 
 export const api = new ApiService();

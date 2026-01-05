@@ -237,6 +237,46 @@ async def get_current_price(symbol: str):
         logger.error(f"Error fetching price for {symbol}: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
+@app.get("/symbols/{symbol}/options")
+async def get_options_data(symbol: str):
+    """
+    Get options chain data for a symbol
+    
+    - **symbol**: Stock ticker symbol
+    """
+    try:
+        from data_layer import DataLayer
+        from features import FeatureEngineer
+        from options_pricing import generate_options_chain
+        
+        dl = DataLayer()
+        state = dl.fetch_symbol_data(symbol.upper())
+        
+        if not state.daily_bars:
+            raise HTTPException(status_code=404, detail="Symbol not found")
+        
+        # Compute features to get ATR
+        fe = FeatureEngineer()
+        fe.compute_features(state)
+        
+        current_price = state.daily_bars[0].close
+        atr = state.features.get("atr_14", current_price * 0.02)  # Default 2% if ATR not available
+        
+        options_chains = generate_options_chain(current_price, atr)
+        
+        return {
+            "success": True,
+            "symbol": symbol.upper(),
+            "current_price": current_price,
+            "atr": atr,
+            "chains": options_chains
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error fetching options data for {symbol}: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 @app.get("/symbols/{symbol}/chart")
 async def get_chart_data(symbol: str, days: int = Query(30, ge=1, le=100)):
     """

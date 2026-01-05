@@ -43,9 +43,13 @@ export default function Home() {
   const [backtestData, setBacktestData] = useState<BacktestResponse | null>(null);
   const [scanData, setScanData] = useState<ScanResponse | null>(null);
   const [chartData, setChartData] = useState<ChartResponse | null>(null);
+  const [chartType, setChartType] = useState<"price" | "ohlc">("price");
+  const [optionsData, setOptionsData] = useState<any>(null);
+  const [selectedExpiration, setSelectedExpiration] = useState<number>(0);
   
   const [loading, setLoading] = useState(false);
   const [chartLoading, setChartLoading] = useState(false);
+  const [optionsLoading, setOptionsLoading] = useState(false);
   const { toast } = useToast();
 
   const handleAnalyze = async () => {
@@ -60,18 +64,24 @@ export default function Home() {
 
     setLoading(true);
     setChartLoading(true);
+    setOptionsLoading(true);
     try {
-      const [analysisData, chartDataResult] = await Promise.all([
+      const [analysisData, chartDataResult, optionsResult] = await Promise.all([
         api.analyze({
           symbol: symbol.toUpperCase(),
           account_size: accountSize,
         }),
-        api.getChartData(symbol.toUpperCase(), 30).catch(() => null)
+        api.getChartData(symbol.toUpperCase(), 30).catch(() => null),
+        api.getOptionsData(symbol.toUpperCase()).catch(() => null)
       ]);
       
       setAnalyzeData(analysisData);
       if (chartDataResult) {
         setChartData(chartDataResult);
+      }
+      if (optionsResult) {
+        setOptionsData(optionsResult);
+        setSelectedExpiration(0);
       }
       toast({
         title: "Success",
@@ -86,6 +96,7 @@ export default function Home() {
     } finally {
       setLoading(false);
       setChartLoading(false);
+      setOptionsLoading(false);
     }
   };
 
@@ -181,17 +192,17 @@ export default function Home() {
   return (
     <div className="min-h-screen p-6 md:p-12 lg:p-16 max-w-7xl mx-auto space-y-8">
       {/* Header */}
-      <motion.div
+      <motion.div 
         initial={{ opacity: 0, y: -20 }}
         animate={{ opacity: 1, y: 0 }}
         className="space-y-4"
       >
-        <h1 className="text-4xl md:text-5xl font-bold font-display bg-gradient-to-br from-white to-white/60 bg-clip-text text-transparent">
+          <h1 className="text-4xl md:text-5xl font-bold font-display bg-gradient-to-br from-white to-white/60 bg-clip-text text-transparent">
           GS Trading System
-        </h1>
+          </h1>
         <p className="text-muted-foreground text-lg max-w-2xl">
           Analyze stocks, run backtests, and scan the market for trading opportunities using advanced technical analysis.
-        </p>
+          </p>
       </motion.div>
 
       {/* Main Tabs */}
@@ -213,12 +224,12 @@ export default function Home() {
 
         {/* Analyze Tab */}
         <TabsContent value="analyze" className="space-y-6">
-          <Card>
-            <CardHeader>
-              <CardTitle>Stock Analysis</CardTitle>
-              <CardDescription>Get detailed technical analysis and trading signals</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
+          <div className="space-y-6">
+            <div className="space-y-4">
+              <div>
+                <h2 className="text-2xl font-bold mb-1">Stock Analysis</h2>
+                <p className="text-sm text-muted-foreground">Get detailed technical analysis and trading signals</p>
+              </div>
               <div className="flex gap-4 items-end">
                 <div className="flex-1 space-y-2">
                   <Label htmlFor="analyze-symbol">Stock Symbol</Label>
@@ -263,258 +274,315 @@ export default function Home() {
                 <div className="space-y-4">
                   <Skeleton className="h-32 w-full" />
                   <Skeleton className="h-32 w-full" />
-                </div>
+        </div>
               )}
 
               {analyzeData && (
-                <motion.div
+        <motion.div 
                   initial={{ opacity: 0, y: 20 }}
                   animate={{ opacity: 1, y: 0 }}
                   className="space-y-6"
                 >
 
                 
-                  {/* Price Chart */}
+                  {/* Charts with Toggle */}
                   {chartData && (
-                    <Card>
-                      <CardHeader>
-                        <CardTitle>{chartData.symbol} Price Chart (30 Days)</CardTitle>
-                      </CardHeader>
-                      <CardContent>
-                        <ResponsiveContainer width="100%" height={400}>
-                          <AreaChart data={chartData.data}>
-                            <defs>
-                              <linearGradient id="colorPrice" x1="0" y1="0" x2="0" y2="1">
-                                <stop offset="5%" stopColor="#8884d8" stopOpacity={0.3}/>
-                                <stop offset="95%" stopColor="#8884d8" stopOpacity={0}/>
-                              </linearGradient>
-                            </defs>
-                            <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
-                            <XAxis 
-                              dataKey="date" 
-                              stroke="#9ca3af"
-                              tick={{ fill: '#9ca3af' }}
-                              angle={-45}
-                              textAnchor="end"
-                              height={80}
-                            />
-                            <YAxis 
-                              stroke="#9ca3af"
-                              tick={{ fill: '#9ca3af' }}
-                              domain={['dataMin - 5', 'dataMax + 5']}
-                            />
-                            <Tooltip
-                              contentStyle={{
-                                backgroundColor: '#1f2937',
-                                border: '1px solid #374151',
-                                borderRadius: '8px',
-                                color: '#f3f4f6'
-                              }}
-                              formatter={(value: number) => [`$${value.toFixed(2)}`, 'Price']}
-                              labelStyle={{ color: '#9ca3af' }}
-                            />
-                            <Area
-                              type="monotone"
-                              dataKey="close"
-                              stroke="#8884d8"
-                              fillOpacity={1}
-                              fill="url(#colorPrice)"
-                              strokeWidth={2}
-                            />
-                          </AreaChart>
-                        </ResponsiveContainer>
-                      </CardContent>
-                    </Card>
+                    <div className="space-y-4">
+                      <div className="flex items-center justify-between">
+                        <h3 className="text-lg font-semibold">
+                          {chartType === "price" ? `${chartData.symbol} Price Chart (30 Days)` : "OHLC Chart (Open, High, Low, Close)"}
+                        </h3>
+                        <div className="flex gap-2">
+                          <Button
+                            variant={chartType === "price" ? "default" : "outline"}
+                            size="sm"
+                            onClick={() => setChartType("price")}
+                          >
+                            Price Chart
+                          </Button>
+                          <Button
+                            variant={chartType === "ohlc" ? "default" : "outline"}
+                            size="sm"
+                            onClick={() => setChartType("ohlc")}
+                          >
+                            OHLC Chart
+                          </Button>
+                        </div>
+                      </div>
+                      <div className="bg-muted/30 rounded-lg p-4">
+                        {chartType === "price" ? (
+                          <ResponsiveContainer width="100%" height={400}>
+                            <AreaChart data={chartData.data}>
+                              <defs>
+                                <linearGradient id="colorPrice" x1="0" y1="0" x2="0" y2="1">
+                                  <stop offset="5%" stopColor="#8884d8" stopOpacity={0.3}/>
+                                  <stop offset="95%" stopColor="#8884d8" stopOpacity={0}/>
+                                </linearGradient>
+                              </defs>
+                              <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
+                              <XAxis 
+                                dataKey="date" 
+                                stroke="#9ca3af"
+                                tick={{ fill: '#9ca3af' }}
+                                angle={-45}
+                                textAnchor="end"
+                                height={80}
+                              />
+                              <YAxis 
+                                stroke="#9ca3af"
+                                tick={{ fill: '#9ca3af' }}
+                                domain={['dataMin - 5', 'dataMax + 5']}
+                              />
+                              <Tooltip
+                                contentStyle={{
+                                  backgroundColor: '#1f2937',
+                                  border: '1px solid #374151',
+                                  borderRadius: '8px',
+                                  color: '#f3f4f6'
+                                }}
+                                formatter={(value: number) => [`$${value.toFixed(2)}`, 'Price']}
+                                labelStyle={{ color: '#9ca3af' }}
+                              />
+                              <Area
+                                type="monotone"
+                                dataKey="close"
+                                stroke="#8884d8"
+                                fillOpacity={1}
+                                fill="url(#colorPrice)"
+                                strokeWidth={2}
+                              />
+                            </AreaChart>
+                          </ResponsiveContainer>
+                        ) : (
+                          <>
+                            <ResponsiveContainer width="100%" height={400}>
+                              <LineChart data={chartData.data}>
+                                <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
+                                <XAxis 
+                                  dataKey="date" 
+                                  stroke="#9ca3af"
+                                  tick={{ fill: '#9ca3af' }}
+                                  angle={-45}
+                                  textAnchor="end"
+                                  height={80}
+                                />
+                                <YAxis 
+                                  stroke="#9ca3af"
+                                  tick={{ fill: '#9ca3af' }}
+                                  domain={['dataMin - 5', 'dataMax + 5']}
+                                />
+                                <Tooltip
+                                  contentStyle={{
+                                    backgroundColor: '#1f2937',
+                                    border: '1px solid #374151',
+                                    borderRadius: '8px',
+                                    color: '#f3f4f6'
+                                  }}
+                                  formatter={(value: number) => `$${value.toFixed(2)}`}
+                                  labelStyle={{ color: '#9ca3af' }}
+                                />
+                                <Line type="monotone" dataKey="open" stroke="#3b82f6" strokeWidth={2} dot={false} />
+                                <Line type="monotone" dataKey="high" stroke="#10b981" strokeWidth={2} dot={false} />
+                                <Line type="monotone" dataKey="low" stroke="#ef4444" strokeWidth={2} dot={false} />
+                                <Line type="monotone" dataKey="close" stroke="#8884d8" strokeWidth={2} dot={false} />
+                              </LineChart>
+                            </ResponsiveContainer>
+                            <div className="flex gap-4 mt-4 justify-center">
+                              <div className="flex items-center gap-2">
+                                <div className="w-4 h-4 bg-blue-500"></div>
+                                <span className="text-sm text-muted-foreground">Open</span>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <div className="w-4 h-4 bg-green-500"></div>
+                                <span className="text-sm text-muted-foreground">High</span>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <div className="w-4 h-4 bg-red-500"></div>
+                                <span className="text-sm text-muted-foreground">Low</span>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <div className="w-4 h-4 bg-purple-500"></div>
+                                <span className="text-sm text-muted-foreground">Close</span>
+                              </div>
+                            </div>
+                          </>
+                        )}
+                      </div>
+                    </div>
                   )}
-                  {/* Summary Cards */}
+                  
+                  {/* Summary Metrics */}
                   <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                    <Card>
-                      <CardContent className="pt-6">
-                        <div className="text-sm text-muted-foreground">Current Price</div>
-                        <div className="text-2xl font-bold">${analyzeData.analysis.current_price?.toFixed(2)}</div>
-                      </CardContent>
-                    </Card>
-                    <Card>
-                      <CardContent className="pt-6">
-                        <div className="text-sm text-muted-foreground">Bias</div>
-                        <Badge className={getBiasColor(analyzeData.analysis.bias.bias)}>
-                          {analyzeData.analysis.bias.bias}
-                        </Badge>
-                      </CardContent>
-                    </Card>
-                    <Card>
-                      <CardContent className="pt-6">
-                        <div className="text-sm text-muted-foreground">Entry Confidence</div>
-                        <div className="text-2xl font-bold">{analyzeData.analysis.plan.entry_analysis.entry_confidence}/100</div>
-                      </CardContent>
-                    </Card>
-                    <Card>
-                      <CardContent className="pt-6">
-                        <div className="text-sm text-muted-foreground">Tier</div>
-                        <Badge className={getTierColor(analyzeData.analysis.plan.entry_analysis.tier)}>
-                          Tier {analyzeData.analysis.plan.entry_analysis.tier}
-                        </Badge>
-                      </CardContent>
-                    </Card>
+                    <div className="space-y-1">
+                      <div className="text-sm text-muted-foreground">Current Price</div>
+                      <div className="text-2xl font-bold">${analyzeData.analysis.current_price?.toFixed(2)}</div>
+                    </div>
+                    <div className="space-y-1">
+                      <div className="text-sm text-muted-foreground">Bias</div>
+                      <Badge className={getBiasColor(analyzeData.analysis.bias.bias)}>
+                        {analyzeData.analysis.bias.bias}
+                      </Badge>
+                    </div>
+                    <div className="space-y-1">
+                      <div className="text-sm text-muted-foreground">Entry Confidence</div>
+                      <div className="text-2xl font-bold">{analyzeData.analysis.plan.entry_analysis.entry_confidence}/100</div>
+                    </div>
+                    <div className="space-y-1">
+                      <div className="text-sm text-muted-foreground">Tier</div>
+                      <Badge className={getTierColor(analyzeData.analysis.plan.entry_analysis.tier)}>
+                        Tier {analyzeData.analysis.plan.entry_analysis.tier}
+                      </Badge>
+                    </div>
                   </div>
 
 
                   {/* Technical Indicators */}
-                  <Card>
-                    <CardHeader>
-                      <CardTitle>Technical Indicators</CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                        <div>
-                          <div className="text-sm text-muted-foreground">RSI (14)</div>
-                          <div className="text-xl font-semibold">{analyzeData.analysis.features.daily_rsi?.toFixed(2) || "N/A"}</div>
-                        </div>
-                        <div>
-                          <div className="text-sm text-muted-foreground">MACD Regime</div>
-                          <div className="text-xl font-semibold">{analyzeData.analysis.features.daily_macd_regime || "N/A"}</div>
-                        </div>
-                        <div>
-                          <div className="text-sm text-muted-foreground">ATR (14)</div>
-                          <div className="text-xl font-semibold">{analyzeData.analysis.features.atr_14?.toFixed(2) || "N/A"}</div>
-                        </div>
-                        <div>
-                          <div className="text-sm text-muted-foreground">Structure</div>
-                          <div className="text-xl font-semibold">{analyzeData.analysis.features.structure_score || "N/A"}</div>
-                        </div>
+                  <div className="space-y-4 pt-6 border-t border-border/50">
+                    <h3 className="text-lg font-semibold">Technical Indicators</h3>
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
+                      <div className="space-y-1">
+                        <div className="text-sm text-muted-foreground">RSI (14)</div>
+                        <div className="text-xl font-semibold">{analyzeData.analysis.features.daily_rsi?.toFixed(2) || "N/A"}</div>
                       </div>
-                    </CardContent>
-                  </Card>
+                      <div className="space-y-1">
+                        <div className="text-sm text-muted-foreground">MACD Regime</div>
+                        <div className="text-xl font-semibold">{analyzeData.analysis.features.daily_macd_regime || "N/A"}</div>
+                      </div>
+                      <div className="space-y-1">
+                        <div className="text-sm text-muted-foreground">ATR (14)</div>
+                        <div className="text-xl font-semibold">{analyzeData.analysis.features.atr_14?.toFixed(2) || "N/A"}</div>
+                      </div>
+                      <div className="space-y-1">
+                        <div className="text-sm text-muted-foreground">Structure</div>
+                        <div className="text-xl font-semibold">{analyzeData.analysis.features.structure_score || "N/A"}</div>
+                      </div>
+                    </div>
+                  </div>
 
                   {/* Position Sizing */}
-                  <Card>
-                    <CardHeader>
-                      <CardTitle>Position Sizing</CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                        <div>
-                          <div className="text-sm text-muted-foreground">Units</div>
-                          <div className="text-xl font-semibold">{analyzeData.position.units}</div>
-                        </div>
-                        <div>
-                          <div className="text-sm text-muted-foreground">Stop Loss</div>
-                          <div className="text-xl font-semibold">${analyzeData.position.stop.toFixed(2)}</div>
-                        </div>
-                        <div>
-                          <div className="text-sm text-muted-foreground">Take Profit (1R)</div>
-                          <div className="text-xl font-semibold">${analyzeData.position.take_profit_1r.toFixed(2)}</div>
-                        </div>
-                        <div>
-                          <div className="text-sm text-muted-foreground">Take Profit (2R)</div>
-                          <div className="text-xl font-semibold">${analyzeData.position.take_profit_1.toFixed(2)}</div>
-                        </div>
+                  <div className="space-y-4 pt-6 border-t border-border/50">
+                    <h3 className="text-lg font-semibold">Position Sizing</h3>
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
+                      <div className="space-y-1">
+                        <div className="text-sm text-muted-foreground">Units</div>
+                        <div className="text-xl font-semibold">{analyzeData.position.units}</div>
                       </div>
-                      <div className="mt-4 pt-4 border-t">
-                        <div className="text-sm text-muted-foreground">Risk Amount</div>
-                        <div className="text-2xl font-bold text-yellow-400">${analyzeData.position.risk_amount.toFixed(2)}</div>
+                      <div className="space-y-1">
+                        <div className="text-sm text-muted-foreground">Stop Loss</div>
+                        <div className="text-xl font-semibold">${analyzeData.position.stop.toFixed(2)}</div>
                       </div>
-                    </CardContent>
-                  </Card>
+                      <div className="space-y-1">
+                        <div className="text-sm text-muted-foreground">Take Profit (1R)</div>
+                        <div className="text-xl font-semibold">${analyzeData.position.take_profit_1r.toFixed(2)}</div>
+                      </div>
+                      <div className="space-y-1">
+                        <div className="text-sm text-muted-foreground">Take Profit (2R)</div>
+                        <div className="text-xl font-semibold">${analyzeData.position.take_profit_1.toFixed(2)}</div>
+                      </div>
+                    </div>
+                    <div className="mt-4 pt-4 border-t border-border/50">
+                      <div className="text-sm text-muted-foreground">Risk Amount</div>
+                      <div className="text-2xl font-bold text-yellow-400">${analyzeData.position.risk_amount.toFixed(2)}</div>
+                    </div>
+                  </div>
 
                   {/* Entry Analysis */}
-                  <Card>
-                    <CardHeader>
-                      <CardTitle>Entry Analysis</CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="space-y-2">
-                        <div className="flex items-center gap-2">
-                          {analyzeData.analysis.plan.entry_analysis.entry_allowed ? (
-                            <CheckCircle2 className="w-5 h-5 text-green-400" />
-                          ) : (
-                            <AlertCircle className="w-5 h-5 text-red-400" />
-                          )}
-                          <span className="font-semibold">
-                            Entry: {analyzeData.analysis.plan.entry_analysis.entry_allowed ? "ALLOWED" : "WAIT"}
-                          </span>
-                        </div>
-                        <div className="text-sm text-muted-foreground">
-                          Checklist: {analyzeData.analysis.plan.entry_analysis.checklist.join(", ")}
+                  <div className="space-y-3 pt-6 border-t border-border/50">
+                    <h3 className="text-lg font-semibold">Entry Analysis</h3>
+                    <div className="space-y-2">
+                      <div className="flex items-center gap-2">
+                        {analyzeData.analysis.plan.entry_analysis.entry_allowed ? (
+                          <CheckCircle2 className="w-5 h-5 text-green-400" />
+                        ) : (
+                          <AlertCircle className="w-5 h-5 text-red-400" />
+                        )}
+                        <span className="font-semibold">
+                          Entry: {analyzeData.analysis.plan.entry_analysis.entry_allowed ? "ALLOWED" : "WAIT"}
+                        </span>
+                      </div>
+                      <div className="text-sm text-muted-foreground">
+                        Checklist: {analyzeData.analysis.plan.entry_analysis.checklist.join(", ")}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Options Chain */}
+                  {optionsData && optionsData.chains && optionsData.chains.length > 0 && (
+                    <div className="space-y-4 pt-6 border-t border-border/50">
+                      <div className="flex items-center justify-between">
+                        <h3 className="text-lg font-semibold">Options Chain</h3>
+                        <Select value={selectedExpiration.toString()} onValueChange={(v) => setSelectedExpiration(Number(v))}>
+                          <SelectTrigger className="w-48">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {optionsData.chains.map((chain: any, idx: number) => (
+                              <SelectItem key={idx} value={idx.toString()}>
+                                {chain.days_to_expiry} Days ({chain.expiration_date})
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="bg-muted/30 rounded-lg p-4 overflow-x-auto">
+                        <table className="w-full text-sm">
+                          <thead>
+                            <tr className="border-b border-border/50">
+                              <th className="text-left p-2">Strike</th>
+                              <th className="text-right p-2">Call</th>
+                              <th className="text-right p-2">Put</th>
+                              <th className="text-right p-2">Call IV</th>
+                              <th className="text-right p-2">Put IV</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {optionsData.chains[selectedExpiration]?.options.map((opt: any, idx: number) => (
+                              <tr key={idx} className="border-b border-border/30 hover:bg-muted/50">
+                                <td className="p-2 font-medium">${opt.strike.toFixed(2)}</td>
+                                <td className="p-2 text-right">
+                                  <div className="font-semibold">${opt.call_price.toFixed(2)}</div>
+                                  <div className="text-xs text-muted-foreground">
+                                    I: ${opt.call_intrinsic.toFixed(2)} T: ${opt.call_time_value.toFixed(2)}
+                                  </div>
+                                </td>
+                                <td className="p-2 text-right">
+                                  <div className="font-semibold">${opt.put_price.toFixed(2)}</div>
+                                  <div className="text-xs text-muted-foreground">
+                                    I: ${opt.put_intrinsic.toFixed(2)} T: ${opt.put_time_value.toFixed(2)}
+                                  </div>
+                                </td>
+                                <td className="p-2 text-right text-muted-foreground">
+                                  {opt.moneyness > 1 ? "ITM" : opt.moneyness > 0.95 ? "ATM" : "OTM"}
+                                </td>
+                                <td className="p-2 text-right text-muted-foreground">
+                                  {opt.moneyness < 1 ? "ITM" : opt.moneyness < 1.05 ? "ATM" : "OTM"}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                        <div className="mt-4 text-xs text-muted-foreground">
+                          <p>Current Price: ${optionsData.current_price.toFixed(2)} | Volatility: {optionsData.chains[selectedExpiration]?.volatility.toFixed(1)}% | Expiration: {optionsData.chains[selectedExpiration]?.expiration_date}</p>
+                          <p className="mt-1">I = Intrinsic Value, T = Time Value</p>
                         </div>
                       </div>
-                    </CardContent>
-                  </Card>
-
-                  {/* OHLC Chart */}
-                  {chartData && (
-                    <Card>
-                      <CardHeader>
-                        <CardTitle>OHLC Chart (Open, High, Low, Close)</CardTitle>
-                      </CardHeader>
-                      <CardContent>
-                        <ResponsiveContainer width="100%" height={400}>
-                          <LineChart data={chartData.data}>
-                            <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
-                            <XAxis 
-                              dataKey="date" 
-                              stroke="#9ca3af"
-                              tick={{ fill: '#9ca3af' }}
-                              angle={-45}
-                              textAnchor="end"
-                              height={80}
-                            />
-                            <YAxis 
-                              stroke="#9ca3af"
-                              tick={{ fill: '#9ca3af' }}
-                              domain={['dataMin - 5', 'dataMax + 5']}
-                            />
-                            <Tooltip
-                              contentStyle={{
-                                backgroundColor: '#1f2937',
-                                border: '1px solid #374151',
-                                borderRadius: '8px',
-                                color: '#f3f4f6'
-                              }}
-                              formatter={(value: number) => `$${value.toFixed(2)}`}
-                              labelStyle={{ color: '#9ca3af' }}
-                            />
-                            <Line type="monotone" dataKey="open" stroke="#3b82f6" strokeWidth={2} dot={false} />
-                            <Line type="monotone" dataKey="high" stroke="#10b981" strokeWidth={2} dot={false} />
-                            <Line type="monotone" dataKey="low" stroke="#ef4444" strokeWidth={2} dot={false} />
-                            <Line type="monotone" dataKey="close" stroke="#8884d8" strokeWidth={2} dot={false} />
-                          </LineChart>
-                        </ResponsiveContainer>
-                        <div className="flex gap-4 mt-4 justify-center">
-                          <div className="flex items-center gap-2">
-                            <div className="w-4 h-4 bg-blue-500"></div>
-                            <span className="text-sm text-muted-foreground">Open</span>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <div className="w-4 h-4 bg-green-500"></div>
-                            <span className="text-sm text-muted-foreground">High</span>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <div className="w-4 h-4 bg-red-500"></div>
-                            <span className="text-sm text-muted-foreground">Low</span>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <div className="w-4 h-4 bg-purple-500"></div>
-                            <span className="text-sm text-muted-foreground">Close</span>
-                          </div>
-                        </div>
-                      </CardContent>
-                    </Card>
+                    </div>
                   )}
+
                 </motion.div>
               )}
-            </CardContent>
-          </Card>
+            </div>
+          </div>
         </TabsContent>
 
         {/* Backtest Tab */}
         <TabsContent value="backtest" className="space-y-6">
-          <Card>
-            <CardHeader>
-              <CardTitle>Backtest Strategy</CardTitle>
-              <CardDescription>Test your strategy on historical data</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
+          <div className="space-y-6">
+            <div className="space-y-4">
+              <div>
+                <h2 className="text-2xl font-bold mb-1">Backtest Strategy</h2>
+                <p className="text-sm text-muted-foreground">Test your strategy on historical data</p>
+              </div>
               <div className="flex gap-4 items-end">
                 <div className="flex-1 space-y-2">
                   <Label htmlFor="backtest-symbol">Stock Symbol</Label>
@@ -578,42 +646,32 @@ export default function Home() {
                   className="space-y-6"
                 >
                   {/* Results Summary */}
-                  <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                    <Card>
-                      <CardContent className="pt-6">
-                        <div className="text-sm text-muted-foreground">Total Trades</div>
-                        <div className="text-2xl font-bold">{backtestData.results.total_trades}</div>
-                      </CardContent>
-                    </Card>
-                    <Card>
-                      <CardContent className="pt-6">
-                        <div className="text-sm text-muted-foreground">Win Rate</div>
-                        <div className="text-2xl font-bold">{backtestData.results.win_rate.toFixed(1)}%</div>
-                      </CardContent>
-                    </Card>
-                    <Card>
-                      <CardContent className="pt-6">
-                        <div className="text-sm text-muted-foreground">Total PnL</div>
-                        <div className={`text-2xl font-bold ${backtestData.results.total_pnl >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-                          ${backtestData.results.total_pnl.toFixed(2)}
-                        </div>
-                      </CardContent>
-                    </Card>
-                    <Card>
-                      <CardContent className="pt-6">
-                        <div className="text-sm text-muted-foreground">Final Equity</div>
-                        <div className="text-2xl font-bold">${backtestData.results.final_equity.toFixed(2)}</div>
-                      </CardContent>
-                    </Card>
+                  <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+                    <div className="space-y-1">
+                      <div className="text-sm text-muted-foreground">Total Trades</div>
+                      <div className="text-2xl font-bold">{backtestData.results.total_trades}</div>
+                    </div>
+                    <div className="space-y-1">
+                      <div className="text-sm text-muted-foreground">Win Rate</div>
+                      <div className="text-2xl font-bold">{backtestData.results.win_rate.toFixed(1)}%</div>
+                    </div>
+                    <div className="space-y-1">
+                      <div className="text-sm text-muted-foreground">Total PnL</div>
+                      <div className={`text-2xl font-bold ${backtestData.results.total_pnl >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                        ${backtestData.results.total_pnl.toFixed(2)}
+                      </div>
+                    </div>
+                    <div className="space-y-1">
+                      <div className="text-sm text-muted-foreground">Final Equity</div>
+                      <div className="text-2xl font-bold">${backtestData.results.final_equity.toFixed(2)}</div>
+                    </div>
                   </div>
 
                   {/* Equity Curve Chart */}
                   {backtestData.results.trades.length > 0 && (
-                    <Card>
-                      <CardHeader>
-                        <CardTitle>Trade Performance</CardTitle>
-                      </CardHeader>
-                      <CardContent>
+                    <div className="space-y-4 pt-6 border-t border-border/50">
+                      <h3 className="text-lg font-semibold">Trade Performance</h3>
+                      <div className="bg-muted/30 rounded-lg p-4">
                         <ResponsiveContainer width="100%" height={300}>
                           <BarChart data={backtestData.results.trades}>
                             <CartesianGrid strokeDasharray="3 3" />
@@ -623,48 +681,44 @@ export default function Home() {
                             <Bar dataKey="pnl" fill="#8884d8" />
                           </BarChart>
                         </ResponsiveContainer>
-                      </CardContent>
-                    </Card>
+                      </div>
+                    </div>
                   )}
 
                   {/* Trade Log */}
-                  <Card>
-                    <CardHeader>
-                      <CardTitle>Trade Log</CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="space-y-2">
-                        {backtestData.results.trades.map((trade, idx) => (
-                          <div key={idx} className="flex items-center justify-between p-3 border rounded-lg">
-                            <div>
-                              <div className="font-semibold">{trade.entry_date} → {trade.exit_date}</div>
-                              <div className="text-sm text-muted-foreground">{trade.reason}</div>
-                            </div>
-                            <div className="text-right">
-                              <div className={`font-bold ${trade.pnl >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-                                ${trade.pnl.toFixed(2)}
-                              </div>
-                              <div className="text-sm text-muted-foreground">{trade.return_pct.toFixed(2)}%</div>
-                            </div>
+                  <div className="space-y-4 pt-6 border-t border-border/50">
+                    <h3 className="text-lg font-semibold">Trade Log</h3>
+                    <div className="space-y-2">
+                      {backtestData.results.trades.map((trade, idx) => (
+                        <div key={idx} className="flex items-center justify-between p-3 bg-muted/30 rounded-lg">
+                          <div>
+                            <div className="font-semibold">{trade.entry_date} → {trade.exit_date}</div>
+                            <div className="text-sm text-muted-foreground">{trade.reason}</div>
                           </div>
-                        ))}
-                      </div>
-                    </CardContent>
-                  </Card>
+                          <div className="text-right">
+                            <div className={`font-bold ${trade.pnl >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                              ${trade.pnl.toFixed(2)}
+                            </div>
+                            <div className="text-sm text-muted-foreground">{trade.return_pct.toFixed(2)}%</div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
                 </motion.div>
               )}
-            </CardContent>
-          </Card>
+            </div>
+          </div>
         </TabsContent>
 
         {/* Scan Tab */}
         <TabsContent value="scan" className="space-y-6">
-          <Card>
-            <CardHeader>
-              <CardTitle>Market Scanner</CardTitle>
-              <CardDescription>Scan multiple stocks for trading opportunities</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
+          <div className="space-y-6">
+            <div className="space-y-4">
+              <div>
+                <h2 className="text-2xl font-bold mb-1">Market Scanner</h2>
+                <p className="text-sm text-muted-foreground">Scan multiple stocks for trading opportunities</p>
+              </div>
               <div className="space-y-3">
                 <div className="flex gap-4 items-end">
                   <div className="flex-1 space-y-2">
@@ -742,7 +796,7 @@ export default function Home() {
               )}
 
               {scanData && (
-                <motion.div
+        <motion.div 
                   initial={{ opacity: 0, y: 20 }}
                   animate={{ opacity: 1, y: 0 }}
                   className="space-y-4"
@@ -756,14 +810,12 @@ export default function Home() {
 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     {scanData.opportunities.map((opp: Opportunity, idx: number) => (
-                      <Card key={idx}>
-                        <CardHeader>
-                          <div className="flex items-center justify-between">
-                            <CardTitle className="text-xl">{opp.symbol}</CardTitle>
-                            <Badge className={getBiasColor(opp.bias)}>{opp.bias}</Badge>
-                          </div>
-                        </CardHeader>
-                        <CardContent className="space-y-3">
+                      <div key={idx} className="p-4 bg-muted/30 rounded-lg space-y-3">
+                        <div className="flex items-center justify-between">
+                          <h4 className="text-xl font-semibold">{opp.symbol}</h4>
+                          <Badge className={getBiasColor(opp.bias)}>{opp.bias}</Badge>
+                        </div>
+                        <div className="space-y-2">
                           <div className="flex items-center justify-between">
                             <span className="text-sm text-muted-foreground">Confidence</span>
                             <span className="text-lg font-bold">{opp.confidence}/100</span>
@@ -776,27 +828,27 @@ export default function Home() {
                             <span className="text-sm text-muted-foreground">Units</span>
                             <span className="text-lg font-semibold">{opp.units}</span>
                           </div>
-                          <div className="pt-2 border-t">
+                          <div className="pt-2 border-t border-border/50">
                             <div className="text-xs text-muted-foreground mb-1">Strategy</div>
                             <div className="text-sm font-medium">{opp.strategy}</div>
                           </div>
                           <div className="text-xs text-muted-foreground">
                             {opp.reason}
                           </div>
-                        </CardContent>
-                      </Card>
+                        </div>
+                      </div>
                     ))}
                   </div>
 
                   {scanData.opportunities.length === 0 && (
                     <div className="text-center py-12 text-muted-foreground">
                       No opportunities found. Try different symbols or check back later.
-                    </div>
+          </div>
                   )}
-                </motion.div>
-              )}
-            </CardContent>
-          </Card>
+        </motion.div>
+      )}
+            </div>
+          </div>
         </TabsContent>
       </Tabs>
     </div>

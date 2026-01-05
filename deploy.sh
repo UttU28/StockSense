@@ -197,13 +197,28 @@ setup_nginx() {
     
     # Copy nginx config with correct paths
     if [ -f "nginx/stocksense.conf" ]; then
-        echo -e "${YELLOW}Copying nginx configuration...${NC}"
-        # Get absolute path to frontend dist
-        FRONTEND_DIST_PATH="$(pwd)/frontend/dist"
-        # Create temp config with correct path
-        sed "s|/home/uttu28/Desktop/StockSense/frontend/dist|$FRONTEND_DIST_PATH|g" nginx/stocksense.conf > /tmp/stocksense-nginx.conf
-        sudo cp /tmp/stocksense-nginx.conf "$NGINX_CONF_DIR/stocksense.conf"
-        rm /tmp/stocksense-nginx.conf
+        # Check if SSL/HTTPS is already configured
+        EXISTING_CONFIG="$NGINX_CONF_DIR/stocksense.conf"
+        if [ -f "$EXISTING_CONFIG" ] && sudo grep -q "listen 443\|ssl_certificate" "$EXISTING_CONFIG" 2>/dev/null; then
+            echo -e "${YELLOW}SSL/HTTPS already configured. Preserving SSL settings and updating paths only...${NC}"
+            # SSL is configured - only update the frontend dist path and backend port without overwriting SSL
+            FRONTEND_DIST_PATH="$(pwd)/frontend/dist"
+            # Backup the existing config
+            sudo cp "$EXISTING_CONFIG" "$EXISTING_CONFIG.backup"
+            # Update only the frontend dist path in the existing config
+            sudo sed -i "s|root /home/uttu28/Desktop/StockSense/frontend/dist|root $FRONTEND_DIST_PATH|g" "$EXISTING_CONFIG"
+            sudo sed -i "s|root.*frontend/dist|root $FRONTEND_DIST_PATH|g" "$EXISTING_CONFIG"
+            # Update backend proxy port if it's still pointing to 8000
+            sudo sed -i "s|proxy_pass http://localhost:8000;|proxy_pass http://localhost:${BACKEND_PORT};|g" "$EXISTING_CONFIG"
+        else
+            echo -e "${YELLOW}Copying nginx configuration...${NC}"
+            # Get absolute path to frontend dist
+            FRONTEND_DIST_PATH="$(pwd)/frontend/dist"
+            # Create temp config with correct path
+            sed "s|/home/uttu28/Desktop/StockSense/frontend/dist|$FRONTEND_DIST_PATH|g" nginx/stocksense.conf > /tmp/stocksense-nginx.conf
+            sudo cp /tmp/stocksense-nginx.conf "$NGINX_CONF_DIR/stocksense.conf"
+            rm /tmp/stocksense-nginx.conf
+        fi
         
         # If using sites-available/sites-enabled, create symlink
         if [ "$NGINX_CONF_DIR" != "$NGINX_ENABLE_DIR" ] && [ -d "$NGINX_ENABLE_DIR" ]; then
