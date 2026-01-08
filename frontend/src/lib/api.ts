@@ -78,6 +78,7 @@ export interface BacktestRequest {
 export interface Trade {
   entry_date: string;
   exit_date: string;
+  duration_days?: number;
   units: number;
   entry_price: number;
   exit_price: number;

@@ -39,7 +39,7 @@ class AnalyzeRequest(BaseModel):
 class BacktestRequest(BaseModel):
     symbol: str = Field(..., description="Stock symbol (e.g., AAPL)")
     account_size: float = Field(10000, description="Account size for backtesting")
-    days: int = Field(100, description="Number of days to backtest")
+    days: Optional[int] = Field(None, description="Number of days to backtest. If None, uses all available data (5 years)")
 
 class ScanRequest(BaseModel):
     symbols: Optional[List[str]] = Field(None, description="Custom watchlist (default used if not provided)")
@@ -112,11 +112,11 @@ async def analyze(request: AnalyzeRequest):
 @app.post("/backtest")
 async def backtest(request: BacktestRequest):
     """
-    Run backtest on a stock symbol
+    Run backtest on a stock symbol using all available data (5 years) or specified days.
     
     - **symbol**: Stock ticker symbol
     - **account_size**: Starting account size
-    - **days**: Number of days to backtest (default: 100)
+    - **days**: Number of days to backtest. If None, uses all available data (5 years)
     """
     try:
         symbol = request.symbol.upper()
@@ -132,17 +132,24 @@ async def backtest(request: BacktestRequest):
                 detail=f"Failed to fetch data for symbol {symbol}"
             )
         
-        bt = Backtester(start_days_ago=request.days, account_size=request.account_size)
+        # Use all available data if days is None
+        days_to_use = request.days if request.days is not None else None
+        bt = Backtester(start_days_ago=days_to_use, account_size=request.account_size)
         results = bt.run_backtest(state)
         
         if "error" in results:
             raise HTTPException(status_code=400, detail=results["error"])
         
+        # Calculate actual days used
+        actual_days = len(state.daily_bars) if days_to_use is None else min(days_to_use, len(state.daily_bars))
+        
         return {
             "success": True,
             "symbol": symbol,
             "account_size": request.account_size,
-            "days": request.days,
+            "days_requested": request.days,
+            "days_used": actual_days,
+            "total_data_available": len(state.daily_bars),
             "results": results
         }
     except HTTPException:

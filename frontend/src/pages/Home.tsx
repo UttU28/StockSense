@@ -46,7 +46,7 @@ export default function Home() {
   const [chartType, setChartType] = useState<"price" | "ohlc">("price");
   const [optionsData, setOptionsData] = useState<any>(null);
   const [selectedExpiration, setSelectedExpiration] = useState<number>(0);
-  
+
   const [loading, setLoading] = useState(false);
   const [chartLoading, setChartLoading] = useState(false);
   const [optionsLoading, setOptionsLoading] = useState(false);
@@ -186,7 +186,7 @@ export default function Home() {
   useEffect(() => {
     if (activeTab === "analyze" && symbol && !analyzeData) {
       handleAnalyze();
-    }
+  }
   }, [activeTab, symbol]);
 
   return (
@@ -688,18 +688,74 @@ export default function Home() {
                   {/* Trade Log */}
                   <div className="space-y-4 pt-6 border-t border-border/50">
                     <h3 className="text-lg font-semibold">Trade Log</h3>
-                    <div className="space-y-2">
-                      {backtestData.results.trades.map((trade, idx) => (
-                        <div key={idx} className="flex items-center justify-between p-3 bg-muted/30 rounded-lg">
-                          <div>
-                            <div className="font-semibold">{trade.entry_date} → {trade.exit_date}</div>
-                            <div className="text-sm text-muted-foreground">{trade.reason}</div>
-                          </div>
-                          <div className="text-right">
-                            <div className={`font-bold ${trade.pnl >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-                              ${trade.pnl.toFixed(2)}
+                    <div className="space-y-3">
+                      {backtestData.results.trades.map((trade: any, idx: number) => (
+                        <div key={idx} className="p-4 bg-muted/30 rounded-lg space-y-3">
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-3">
+                              <div className="text-xs font-medium text-muted-foreground">#{idx + 1}</div>
+                              <div>
+                                <div className="font-semibold text-sm">
+                                  {trade.entry_date} → {trade.exit_date}
+                                  {trade.duration_days !== undefined && (
+                                    <span className="text-muted-foreground font-normal ml-2">
+                                      ({trade.duration_days} {trade.duration_days === 1 ? 'day' : 'days'})
+                                    </span>
+                                  )}
+                                </div>
+                                <div className="flex items-center gap-2 mt-1">
+                                  <Badge variant="outline" className="text-xs">
+                                    {trade.action || 'BUY'}
+                                  </Badge>
+                                  <Badge variant="outline" className="text-xs">
+                                    {trade.trade_type || 'STOCK'}
+                                  </Badge>
+                                  <Badge className={`text-xs ${trade.direction === 'BULLISH' ? 'bg-green-500/20 text-green-400 border-green-500/30' : trade.direction === 'BEARISH' ? 'bg-red-500/20 text-red-400 border-red-500/30' : 'bg-gray-500/20 text-gray-400 border-gray-500/30'}`}>
+                                    {trade.direction || 'NEUTRAL'}
+                                  </Badge>
+                                  {trade.call_or_put && trade.call_or_put !== 'N/A' && (
+                                    <Badge variant="outline" className="text-xs">
+                                      {trade.call_or_put}
+                                    </Badge>
+                                  )}
+                                </div>
+                                <div className="text-xs text-muted-foreground mt-1">
+                                  {trade.reason.replace(/_/g, ' ')}
+                                  {trade.options_strategy && trade.options_strategy !== 'NONE' && (
+                                    <span className="ml-2">• Suggested: {trade.options_strategy}</span>
+                                  )}
+                                </div>
+                              </div>
                             </div>
-                            <div className="text-sm text-muted-foreground">{trade.return_pct.toFixed(2)}%</div>
+                            <div className={`text-right font-bold text-lg ${trade.pnl >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                              ${trade.pnl.toFixed(2)}
+                              <div className={`text-xs font-normal ${trade.return_pct >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                                {trade.return_pct >= 0 ? '+' : ''}{trade.return_pct.toFixed(2)}%
+                              </div>
+                            </div>
+                          </div>
+                          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 pt-2 border-t border-border/30 text-sm">
+                            <div>
+                              <div className="text-xs text-muted-foreground">Entry Price</div>
+                              <div className="font-semibold">${trade.entry_price?.toFixed(2) || 'N/A'}</div>
+                            </div>
+                            <div>
+                              <div className="text-xs text-muted-foreground">Exit Price</div>
+                              <div className="font-semibold">${trade.exit_price?.toFixed(2) || 'N/A'}</div>
+                            </div>
+                            <div>
+                              <div className="text-xs text-muted-foreground">Units</div>
+                              <div className="font-semibold">{trade.units}</div>
+                            </div>
+                            <div>
+                              <div className="text-xs text-muted-foreground">Price Change</div>
+                              <div className={`font-semibold ${trade.price_change >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                                {trade.price_change >= 0 ? '+' : ''}${trade.price_change?.toFixed(2) || '0.00'} 
+                                <span className="text-xs ml-1">
+                                  ({trade.price_change_pct >= 0 ? '+' : ''}{trade.price_change_pct?.toFixed(2) || '0.00'}%)
+                                </span>
+                              </div>
+                            </div>
                           </div>
                         </div>
                       ))}

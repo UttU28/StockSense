@@ -63,8 +63,11 @@ def analyze_symbol(symbol: str, account_size: float = 10000, silent: bool = Fals
     
     return state, position_result
 
-def backtest_symbol(symbol: str, account_size: float = 10000):
-    print(f"\n--- Backtesting {symbol} (Last 100 Days) ---")
+def backtest_symbol(symbol: str, account_size: float = 10000, days: int = None):
+    if days is None:
+        print(f"\n--- Backtesting {symbol} (All Available Data - 5 Years) ---")
+    else:
+        print(f"\n--- Backtesting {symbol} (Last {days} Days) ---")
     
     # 1. Data Layer (Fetch once)
     dl = DataLayer()
@@ -74,7 +77,7 @@ def backtest_symbol(symbol: str, account_size: float = 10000):
         return
 
     # 2. Run Backtest
-    bt = Backtester(start_days_ago=100, account_size=account_size)
+    bt = Backtester(start_days_ago=days, account_size=account_size)
     results = bt.run_backtest(state)
     
     if "error" in results:
@@ -90,7 +93,8 @@ def backtest_symbol(symbol: str, account_size: float = 10000):
     
     print("\n[Trade Log]")
     for t in results['trades']:
-        print(f"{t['entry_date']} -> {t['exit_date']}: {t['reason']} | PnL: ${t['pnl']} ({t['return_pct']}%)")
+        duration = t.get('duration_days', 0)
+        print(f"{t['entry_date']} -> {t['exit_date']} ({duration} days): {t['reason']} | PnL: ${t['pnl']} ({t['return_pct']}%)")
 
 
 def scan_market(account_size: float, custom_list_str: str = None):
@@ -212,6 +216,7 @@ if __name__ == "__main__":
     parser.add_argument("command", choices=["analyze", "backtest", "scan"], help="Command to run")
     parser.add_argument("symbol", nargs="?", help="Stock symbol (e.g., AAPL) - Required for analyze/backtest")
     parser.add_argument("--account", type=float, default=10000, help="Account size used for position sizing")
+    parser.add_argument("--days", type=int, default=None, help="Number of days to backtest (default: all available data - 5 years)")
     
     args = parser.parse_args()
     
@@ -222,4 +227,5 @@ if __name__ == "__main__":
     elif args.command == "analyze":
         analyze_symbol(args.symbol.upper(), args.account)
     elif args.command == "backtest":
-        backtest_symbol(args.symbol.upper(), args.account)
+        # Use all available data (5 years) by default, or specified days
+        backtest_symbol(args.symbol.upper(), args.account, days=args.days)
