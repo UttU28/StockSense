@@ -245,29 +245,24 @@ def main():
     # Ensure database and tables are initialized
     os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
     DataLayer()  # Initialize database and create tables
-    
-    if len(sys.argv) < 2:
-        print("Usage:")
-        print("  python daily_update.py SYMBOL [SYMBOL2 ...]")
-        print("  python daily_update.py --watchlist")
-        print("\nExample:")
-        print("  python daily_update.py AAPL")
-        print("  python daily_update.py AAPL TSLA NVDA")
-        sys.exit(1)
-    
+
     apiKey = ALPHA_VANTAGE_API_KEY
     symbols = []
-    
-    if sys.argv[1] == "--watchlist":
-        symbols = ['NVDA', 'TSLA', 'AMD', 'MSFT', 'AMZN', 'GOOGL', 'META', 'AAPL']
+
+    # If no symbols provided, use default batch list
+    if len(sys.argv) < 2:
+        symbols = ["AAPL", "NVDA", "PANW", "RH", "AVGO", "MSTR", "COIN", "BLK", "ADBE", "MDB", "ASML", "TSLA"]
+        print(f"No symbols provided, defaulting to: {', '.join(symbols)}\n")
+    elif sys.argv[1] == "--watchlist":
+        symbols = ['AAPL', 'NVDA', 'PANW', 'AVGO', 'ADBE', 'MDB', 'ASML', 'TSLA', 'BLK', 'RH', 'MSTR', 'COIN']
         print(f"Updating watchlist: {', '.join(symbols)}\n")
     else:
         symbols = [s.upper() for s in sys.argv[1:]]
         print(f"Updating symbols: {', '.join(symbols)}\n")
-    
+
     startTime = datetime.now()
     results = []
-    
+
     for symbol in symbols:
         try:
             result = updateSymbol(symbol, apiKey)
@@ -275,7 +270,7 @@ def main():
         except Exception as e:
             print(f"[{symbol}] Error: {e}")
             results.append({"symbol": symbol, "success": False, "error": str(e)})
-    
+
     # Summary
     elapsed = (datetime.now() - startTime).total_seconds()
     print(f"\n{'='*60}")

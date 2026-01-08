@@ -298,57 +298,49 @@ def updateDailyDataIncremental(symbol: str, apiKey: str) -> dict:
     else:
         print(f"  ✓ Already up to date (no new data)")
         return {"updated": False, "new_days_added": 0, "total_fetched": len(fetchedBars)}
-
 if __name__ == "__main__":
     import sys
-    
-    # Ensure database and tables are initialized
+
+    batch_symbols = ["AAPL", "NVDA", "PANW", "RH", "AVGO", "MSTR", "COIN", "BLK", "ADBE", "MDB", "ASML", "TSLA"]
+
     os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
-    DataLayer()  # Initialize database and create tables
-    
+    DataLayer()
+
     apiKey = ALPHA_VANTAGE_API_KEY
-    
-    if len(sys.argv) < 2:
-        print("Usage:")
-        print("  python scraping5y.py SYMBOL              # Full 5-year history fetch")
-        print("  python scraping5y.py SYMBOL --update     # Incremental daily update")
-        print("  python scraping5y.py --update SYMBOL     # Incremental daily update (alternative)")
-        print("\nExample:")
-        print("  python scraping5y.py AAPL")
-        print("  python scraping5y.py AAPL --update")
-        sys.exit(1)
-    
-    # Check if --update flag is present
+
     args = sys.argv[1:]
     isUpdate = "--update" in args
-    
     if isUpdate:
-        args.remove("--update")
-    
+        args = [a for a in args if a != "--update"]
+
+    symbols_to_run = []
+    batch_mode = False
+
     if not args:
-        print("Error: Please provide a symbol")
-        sys.exit(1)
-    
-    symbol = args[0].upper()
-    
-    if isUpdate:
-        # Incremental daily update
-        print(f"Starting incremental daily update for {symbol}")
-        print(f"This will fetch latest ~100 days and store only new data\n")
-        result = updateDailyDataIncremental(symbol, apiKey)
-        
-        if result["updated"]:
-            print(f"\n✅ Successfully updated: Added {result['new_days_added']} new days")
-        else:
-            print(f"\n✅ Already up to date (no new data)")
+        print("No symbol provided, running batch mode for:")
+        print(", ".join(batch_symbols))
+        symbols_to_run = batch_symbols
+        batch_mode = True
     else:
-        # Full 5-year history fetch
-        print(f"Starting 5-year historical data fetch for {symbol}")
-        print(f"This will take approximately 2 minutes (8 API calls with rate limiting)\n")
-        
-        success = fetchAndStore5YearHistory(symbol, apiKey)
-        
-        if success:
-            print(f"✅ Successfully stored complete 5-year history for {symbol}")
+        symbols_to_run = [args[0].upper()]
+
+    for symbol in symbols_to_run:
+        if isUpdate:
+            print(f"Starting incremental daily update for {symbol}")
+            print(f"This will fetch latest ~100 days and store only new data\n")
+            result = updateDailyDataIncremental(symbol, apiKey)
+
+            if result["updated"]:
+                print(f"\n✅ Successfully updated: Added {result['new_days_added']} new days")
+            else:
+                print(f"\n✅ Already up to date (no new data)")
         else:
-            print(f"⚠️  Some data may be missing for {symbol}. Check logs above.")
+            print(f"Starting 5-year historical data fetch for {symbol}")
+            print(f"This will take approximately 2 minutes (8 API calls with rate limiting)\n")
+
+            success = fetchAndStore5YearHistory(symbol, apiKey)
+
+            if success:
+                print(f"✅ Successfully stored complete 5-year history for {symbol}")
+            else:
+                print(f"⚠️  Some data may be missing for {symbol}. Check logs above.")

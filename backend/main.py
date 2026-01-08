@@ -99,7 +99,7 @@ def backtest_symbol(symbol: str, account_size: float = 10000, days: int = None):
 
 def scan_market(account_size: float, custom_list_str: str = None):
     # Default list
-    default_watchlist = ['NVDA', 'TSLA', 'AMD', 'MSFT', 'AMZN', 'GOOGL', 'META', 'AAPL']
+    default_watchlist = ['AAPL', 'NVDA', 'PANW', 'AVGO', 'ADBE', 'MDB', 'ASML', 'TSLA', 'BLK', 'RH', 'MSTR', 'COIN']
     
     if custom_list_str:
         # Split by comma or space and strip

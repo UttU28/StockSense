@@ -171,7 +171,7 @@ async def scan(request: ScanRequest):
         from main import analyze_symbol
         from data_layer import DataLayer
         
-        default_watchlist = ['NVDA', 'TSLA', 'AMD', 'MSFT', 'AMZN', 'GOOGL', 'META', 'AAPL']
+        default_watchlist = ['AAPL', 'NVDA', 'PANW', 'AVGO', 'ADBE', 'MDB', 'ASML', 'TSLA', 'BLK', 'RH', 'MSTR', 'COIN']
         watchlist = request.symbols if request.symbols else default_watchlist
         watchlist = [s.upper() for s in watchlist]
         

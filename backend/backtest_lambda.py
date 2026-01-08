@@ -139,7 +139,7 @@ def lambda_handler(event, context):
     - {"tickers": ["NVDA"], "strategies": ["RSI", "MACD"]} (Subsets)
     """
     # 1. Configuration
-    default_tickers = ["NVDA", "PANW", "RH", "AVGO", "MSTR", "COIN", "BLK", "ADBE", "MDB", "ASML", "TSLA"]
+    default_tickers = ["AAPL", "NVDA", "PANW", "RH", "AVGO", "MSTR", "COIN", "BLK", "ADBE", "MDB", "ASML", "TSLA"]
     default_strategies = ["RSI", "EMA", "SMA", "MACD", "BBANDS"]
     
     tickers = event.get('tickers')

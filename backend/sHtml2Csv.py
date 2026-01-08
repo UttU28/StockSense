@@ -314,7 +314,7 @@ def main():
     os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
     DataLayer()  # Initialize database and create tables
     
-    htmlFilePath = Path('sss.html')
+    htmlFilePath = Path('cache/sss.html')
     
     if not htmlFilePath.exists():
         print(f"Error: {htmlFilePath} not found")
@@ -335,7 +335,7 @@ def main():
     
     print(f"Found {len(rows)} data rows")
     
-    outputPath = Path(f'{stockSymbol}_data.csv')
+    outputPath = Path(f'cache/{stockSymbol}_data.csv')
     processedRows, fixedHeaders = saveToCsv(stockSymbol, headers, rows, outputPath)
     
     print("\nUpdating database...")

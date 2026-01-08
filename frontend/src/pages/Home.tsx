@@ -243,7 +243,7 @@ export default function Home() {
                           <SelectLabel>{category}</SelectLabel>
                           {stocks.map((stock) => (
                             <SelectItem key={stock.symbol} value={stock.symbol}>
-                              {stock.symbol} - {stock.name}
+                              {stock.index}. {stock.symbol} - {stock.name}
                             </SelectItem>
                           ))}
                         </SelectGroup>
@@ -596,7 +596,7 @@ export default function Home() {
                           <SelectLabel>{category}</SelectLabel>
                           {stocks.map((stock) => (
                             <SelectItem key={stock.symbol} value={stock.symbol}>
-                              {stock.symbol} - {stock.name}
+                              {stock.index}. {stock.symbol} - {stock.name}
                             </SelectItem>
                           ))}
                         </SelectGroup>
