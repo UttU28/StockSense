@@ -177,7 +177,7 @@ def print_report(state, position_result):
     
     print("\n--- Structure & Patterns ---")
     print(f"Structure Score: {state.features.get('structure_score')}")
-    print(f"SMA 50: {round(state.features.get('sma_50', 0), 2)} | SMA 200: {round(state.features.get('sma_200', 0), 2)}")
+    print(f"SMA 55: {round(state.features.get('sma_55', 0), 2)} | SMA 89: {round(state.features.get('sma_89', 0), 2)} | SMA 144: {round(state.features.get('sma_144', 0), 2)} | SMA 233: {round(state.features.get('sma_233', 0), 2)}")
     
     patterns = []
     if state.features.get("is_hammer"): patterns.append("HAMMER")

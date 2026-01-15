@@ -32,3 +32,4 @@ backend/gs_data.db
 
 # Nginx logs (if stored in project)
 nginx/*.log
+credentials.json

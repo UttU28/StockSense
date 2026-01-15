@@ -11,15 +11,6 @@ class DailyBar:
     volume: int
 
 @dataclass
-class WeeklyBar:
-    date: str # Week ending date
-    open: float
-    high: float
-    low: float
-    close: float
-    volume: int
-
-@dataclass
 class IndicatorSet:
     # We store indicators as generic dicts for flexibility, 
     # or specific fields if we want strict typing.
@@ -44,7 +35,6 @@ class SymbolState:
     symbol: str
     last_updated: str
     daily_bars: List[DailyBar] = field(default_factory=list)
-    weekly_bars: List[WeeklyBar] = field(default_factory=list)
     indicators: IndicatorSet = field(default_factory=IndicatorSet)
     earnings: List[EarningsRecord] = field(default_factory=list)
     

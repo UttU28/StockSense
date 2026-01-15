@@ -2,7 +2,7 @@ from typing import Dict, Any, List
 from datetime import datetime
 import pandas as pd
 import numpy as np
-from models import SymbolState, EarningsRecord, WeeklyBar, DailyBar
+from models import SymbolState, EarningsRecord, DailyBar, IndicatorSet
 
 class FeatureEngineer:
     def compute_features(self, state: SymbolState) -> Dict[str, Any]:
@@ -16,13 +16,22 @@ class FeatureEngineer:
         features.update(self._compute_earnings_features(state.earnings))
         
         # 3. Technical Features (Daily)
-        latest_date = state.daily_bars[0].date if state.daily_bars else None
+        # Get the latest date (daily_bars might be sorted in any order)
+        if state.daily_bars:
+            sorted_bars = sorted(state.daily_bars, key=lambda x: x.date, reverse=True)
+            latest_date = sorted_bars[0].date if sorted_bars else None
+        else:
+            latest_date = None
         if latest_date:
             # RSI
-            rsi_val = state.indicators.daily_rsi.get(latest_date)
-            if rsi_val is not None:
-                features["daily_rsi"] = rsi_val
-                features["daily_rsi_zone"] = self._get_rsi_zone(rsi_val)
+            dailyIndicators = state.indicators.daily_rsi
+            if isinstance(dailyIndicators, dict):
+                latestIndicators = dailyIndicators.get(latest_date, {})
+                if isinstance(latestIndicators, dict):
+                    rsi_val = latestIndicators.get("RSI_1day")
+                    if rsi_val is not None:
+                        features["daily_rsi"] = rsi_val
+                        features["daily_rsi_zone"] = self._get_rsi_zone(rsi_val)
             
             # MACD (Calculate Locally due to API Premium Limit)
             daily_bars_sorted = sorted(state.daily_bars, key=lambda x: x.date, reverse=False) # Oldest first
@@ -44,25 +53,66 @@ class FeatureEngineer:
             features.update(self._compute_candle_features(state.daily_bars))
             
             # Structure (SMAs) & ATR
-            features.update(self._compute_structure_and_volatility(state.daily_bars, state.weekly_bars))
+            features.update(self._compute_structure_and_volatility(state.daily_bars, state.indicators))
             
             # Key Levels
             features.update(self._compute_supply_demand_levels(state.daily_bars))
 
-        # 4. Technical Features (Weekly)
-        # We need to find the latest available weekly data point
-        latest_week = state.weekly_bars[0].date if state.weekly_bars else None
-        if latest_week:
-            rsi_w_val = state.indicators.weekly_rsi.get(latest_week)
-            if rsi_w_val is not None:
-                features["weekly_rsi"] = rsi_w_val
-            
-            # Weekly MACD Local Calc
-            weekly_bars_sorted = sorted(state.weekly_bars, key=lambda x: x.date, reverse=False)
-            macd_w_vals = self._calculate_macd_from_bars(weekly_bars_sorted)
-            
-            if macd_w_vals:
-                 features["weekly_macd_regime"] = self._get_macd_regime(macd_w_vals)
+        # 4. Technical Features (Weekly) - from daily_indicators
+        if latest_date:
+            dailyIndicators = state.indicators.daily_rsi
+            if isinstance(dailyIndicators, dict):
+                latestIndicators = dailyIndicators.get(latest_date, {})
+                if isinstance(latestIndicators, dict):
+                    rsi_w_val = latestIndicators.get("RSI_1week")
+                    if rsi_w_val is not None:
+                        features["weekly_rsi"] = rsi_w_val
+                    
+                    macd_1week = latestIndicators.get("MACD_1week")
+                    if macd_1week is not None:
+                        macd_w_vals = {
+                            "MACD": macd_1week,
+                            "MACD_Signal": latestIndicators.get("MACD_Signal_1week"),
+                            "MACD_Hist": latestIndicators.get("MACD_Hist_1week")
+                        }
+                        features["weekly_macd_regime"] = self._get_macd_regime(macd_w_vals)
+                    
+                    # Add all indicators to features for API response
+                    features["indicators"] = {
+                        "daily": {
+                            "rsi": latestIndicators.get("RSI_1day"),
+                            "macd": latestIndicators.get("MACD_1day"),
+                            "macd_signal": latestIndicators.get("MACD_Signal_1day"),
+                            "macd_hist": latestIndicators.get("MACD_Hist_1day"),
+                            "bb_upper": latestIndicators.get("BB_Upper_1day"),
+                            "bb_middle": latestIndicators.get("BB_Middle_1day"),
+                            "bb_lower": latestIndicators.get("BB_Lower_1day")
+                        },
+                        "weekly": {
+                            "rsi": latestIndicators.get("RSI_1week"),
+                            "macd": latestIndicators.get("MACD_1week"),
+                            "macd_signal": latestIndicators.get("MACD_Signal_1week"),
+                            "macd_hist": latestIndicators.get("MACD_Hist_1week"),
+                            "bb_upper": latestIndicators.get("BB_Upper_1week"),
+                            "bb_middle": latestIndicators.get("BB_Middle_1week"),
+                            "bb_lower": latestIndicators.get("BB_Lower_1week")
+                        },
+                        "monthly": {
+                            "rsi": latestIndicators.get("RSI_1month"),
+                            "macd": latestIndicators.get("MACD_1month"),
+                            "macd_signal": latestIndicators.get("MACD_Signal_1month"),
+                            "macd_hist": latestIndicators.get("MACD_Hist_1month"),
+                            "bb_upper": latestIndicators.get("BB_Upper_1month"),
+                            "bb_middle": latestIndicators.get("BB_Middle_1month"),
+                            "bb_lower": latestIndicators.get("BB_Lower_1month")
+                        },
+                        "sma": {
+                            "sma_55": latestIndicators.get("SMA_55"),
+                            "sma_89": latestIndicators.get("SMA_89"),
+                            "sma_144": latestIndicators.get("SMA_144"),
+                            "sma_233": latestIndicators.get("SMA_233")
+                        }
+                    }
 
         state.features = features
         return features
@@ -169,18 +219,16 @@ class FeatureEngineer:
             "is_hammer": is_hammer
         }
 
-    def _compute_structure_and_volatility(self, daily_bars: List[DailyBar], weekly_bars: List[WeeklyBar]) -> Dict[str, Any]:
+    def _compute_structure_and_volatility(self, daily_bars: List[DailyBar], indicators: IndicatorSet) -> Dict[str, Any]:
         """
         Compute ATR from Daily data.
-        Compute Structure (Long trend) from Weekly data (40-week SMA ~ 200-day SMA).
-        Compute Short trend (50-day SMA proxy -> 10-week SMA).
+        Compute Structure (Long trend) from SMAs stored in daily_indicators.
         """
-        result = {"structure_score": "UNKNOWN", "atr_14": 0, "sma_50": 0, "sma_200": 0}
+        result = {"structure_score": "UNKNOWN", "atr_14": 0, "sma_55": 0, "sma_89": 0, "sma_144": 0, "sma_233": 0}
         
         # 1. ATR (Daily)
         if len(daily_bars) >= 15:
             try:
-                # DF sorted ascending
                 df_d = pd.DataFrame([vars(b) for b in daily_bars])
                 df_d['date'] = pd.to_datetime(df_d['date'])
                 df_d = df_d.sort_values('date')
@@ -197,30 +245,38 @@ class FeatureEngineer:
             except Exception as e:
                 print(f"ATR Calc Failed: {e}")
 
-        # 2. Structure (Weekly)
-        # 10-week SMA ~ 50-day SMA
-        # 40-week SMA ~ 200-day SMA
-        if len(weekly_bars) >= 40:
+        # 2. Structure (from daily_indicators SMAs)
+        if daily_bars and len(daily_bars) > 0:
             try:
-                df_w = pd.DataFrame([vars(b) for b in weekly_bars])
-                df_w['date'] = pd.to_datetime(df_w['date'])
-                df_w = df_w.sort_values('date')
+                sorted_bars = sorted(daily_bars, key=lambda x: x.date, reverse=True)
+                latest_date = sorted_bars[0].date
+                current_price = sorted_bars[0].close
                 
-                close_w = df_w['close']
-                sma10_w = close_w.rolling(window=10).mean().iloc[-1]
-                sma40_w = close_w.rolling(window=40).mean().iloc[-1]
-                current_price = close_w.iloc[-1]
-                
-                # Update result with proxies
-                result["sma_50"] = sma10_w # Proxy
-                result["sma_200"] = sma40_w # Proxy
-                
-                if current_price > sma10_w and sma10_w > sma40_w:
-                    result["structure_score"] = "HIGH"
-                elif current_price < sma10_w and sma10_w < sma40_w:
-                    result["structure_score"] = "LOW"
-                else:
-                    result["structure_score"] = "NEUTRAL"
+                dailyIndicators = indicators.daily_rsi
+                if isinstance(dailyIndicators, dict):
+                    latestIndicators = dailyIndicators.get(latest_date, {})
+                    if isinstance(latestIndicators, dict):
+                        sma_55 = latestIndicators.get("SMA_55")
+                        sma_89 = latestIndicators.get("SMA_89")
+                        sma_144 = latestIndicators.get("SMA_144")
+                        sma_233 = latestIndicators.get("SMA_233")
+                        
+                        if sma_55 is not None:
+                            result["sma_55"] = sma_55
+                        if sma_89 is not None:
+                            result["sma_89"] = sma_89
+                        if sma_144 is not None:
+                            result["sma_144"] = sma_144
+                        if sma_233 is not None:
+                            result["sma_233"] = sma_233
+                        
+                        if sma_55 is not None and sma_233 is not None:
+                            if current_price > sma_55 and sma_55 > sma_233:
+                                result["structure_score"] = "HIGH"
+                            elif current_price < sma_55 and sma_55 < sma_233:
+                                result["structure_score"] = "LOW"
+                            else:
+                                result["structure_score"] = "NEUTRAL"
             except Exception as e:
                 print(f"Structure Calc Failed: {e}")
                 

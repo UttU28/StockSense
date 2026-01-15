@@ -4,7 +4,7 @@ from datetime import datetime, timedelta
 from typing import List, Dict, Any, Tuple
 from dataclasses import replace
 
-from models import SymbolState, DailyBar, WeeklyBar
+from models import SymbolState, DailyBar
 from features import FeatureEngineer
 from rules import RulesEngine
 from position_risk import PositionSizer
@@ -29,7 +29,6 @@ class Backtester:
             return {"error": "No daily data"}
 
         all_daily = sorted(full_state.daily_bars, key=lambda x: x.date)
-        all_weekly = sorted(full_state.weekly_bars, key=lambda x: x.date)
         
         # Use all available data if start_days_ago is None
         if self.start_days_ago is None:
@@ -58,14 +57,11 @@ class Backtester:
                 self._check_exit(current_bar, self.active_position)
             
             pit_daily = all_daily[:idx+1][::-1]
-            pit_weekly = [w for w in all_weekly if datetime.strptime(w.date, "%Y-%m-%d") < current_date_dt]
-            pit_weekly = pit_weekly[::-1]
             
             pit_state = SymbolState(
                 symbol=full_state.symbol,
                 last_updated=current_date_str,
                 daily_bars=pit_daily,
-                weekly_bars=pit_weekly,
                 earnings=full_state.earnings
             )
             pit_state.indicators = full_state.indicators

@@ -45,7 +45,7 @@ class ScanRequest(BaseModel):
     symbols: Optional[List[str]] = Field(None, description="Custom watchlist (default used if not provided)")
     account_size: float = Field(10000, description="Account size for position sizing")
 
-def state_to_dict(state: SymbolState) -> Dict[str, Any]:
+def stateToDict(state: SymbolState) -> Dict[str, Any]:
     """Convert SymbolState to JSON-serializable dict"""
     if state is None:
         return None
@@ -90,9 +90,9 @@ async def analyze(request: AnalyzeRequest):
     """
     try:
         symbol = request.symbol.upper()
-        state, position_result = analyze_symbol(symbol, request.account_size, silent=True)
+        state, positionResult = analyze_symbol(symbol, request.account_size, silent=True)
         
-        if state is None or position_result is None:
+        if state is None or positionResult is None:
             raise HTTPException(
                 status_code=404,
                 detail=f"Failed to fetch data for symbol {symbol}. Check if symbol is valid."
@@ -102,8 +102,8 @@ async def analyze(request: AnalyzeRequest):
             "success": True,
             "symbol": symbol,
             "account_size": request.account_size,
-            "analysis": state_to_dict(state),
-            "position": position_result
+            "analysis": stateToDict(state),
+            "position": positionResult
         }
     except Exception as e:
         logger.error(f"Error analyzing {request.symbol}: {str(e)}")
@@ -132,23 +132,21 @@ async def backtest(request: BacktestRequest):
                 detail=f"Failed to fetch data for symbol {symbol}"
             )
         
-        # Use all available data if days is None
-        days_to_use = request.days if request.days is not None else None
-        bt = Backtester(start_days_ago=days_to_use, account_size=request.account_size)
+        daysToUse = request.days if request.days is not None else None
+        bt = Backtester(start_days_ago=daysToUse, account_size=request.account_size)
         results = bt.run_backtest(state)
         
         if "error" in results:
             raise HTTPException(status_code=400, detail=results["error"])
         
-        # Calculate actual days used
-        actual_days = len(state.daily_bars) if days_to_use is None else min(days_to_use, len(state.daily_bars))
+        actualDays = len(state.daily_bars) if daysToUse is None else min(daysToUse, len(state.daily_bars))
         
         return {
             "success": True,
             "symbol": symbol,
             "account_size": request.account_size,
             "days_requested": request.days,
-            "days_used": actual_days,
+            "days_used": actualDays,
             "total_data_available": len(state.daily_bars),
             "results": results
         }
@@ -167,12 +165,11 @@ async def scan(request: ScanRequest):
     - **account_size**: Account size for position sizing
     """
     try:
-        symbols_str = None
         from main import analyze_symbol
         from data_layer import DataLayer
         
-        default_watchlist = ['AAPL', 'NVDA', 'PANW', 'AVGO', 'ADBE', 'MDB', 'ASML', 'TSLA', 'BLK', 'RH', 'MSTR', 'COIN']
-        watchlist = request.symbols if request.symbols else default_watchlist
+        defaultWatchlist = ['AAPL', 'NVDA', 'PANW', 'AVGO', 'ADBE', 'MDB', 'ASML', 'TSLA', 'BLK', 'RH', 'MSTR', 'COIN']
+        watchlist = request.symbols if request.symbols else defaultWatchlist
         watchlist = [s.upper() for s in watchlist]
         
         opportunities = []
@@ -183,20 +180,20 @@ async def scan(request: ScanRequest):
                 if not state: 
                     continue
                 
-                entry_conf = state.plan.get("entry_analysis", {}).get("entry_confidence", 0)
+                entryConf = state.plan.get("entry_analysis", {}).get("entry_confidence", 0)
                 checklist = state.plan.get("entry_analysis", {}).get("checklist", [])
-                reason_str = ", ".join(checklist[:3]) if checklist else "None"
+                reasonStr = ", ".join(checklist[:3]) if checklist else "None"
                 
-                if entry_conf >= 40:
+                if entryConf >= 40:
                     opportunities.append({
                         "symbol": sym,
                         "bias": state.bias.get("bias"),
-                        "confidence": entry_conf,
+                        "confidence": entryConf,
                         "strategy": state.plan.get("options_strategy", {}).get("type"),
                         "take_profit_1r": pos.get("take_profit_1r"),
                         "take_profit_2r": pos.get("take_profit_1"),
                         "units": pos.get("units"),
-                        "reason": reason_str,
+                        "reason": reasonStr,
                         "current_price": state.daily_bars[0].close if state.daily_bars else None
                     })
             except Exception as e:
@@ -227,16 +224,16 @@ async def get_current_price(symbol: str):
         if not state.daily_bars:
             raise HTTPException(status_code=404, detail="Symbol not found")
         
-        latest_bar = state.daily_bars[0]
+        latestBar = state.daily_bars[0]
         return {
             "success": True,
             "symbol": symbol.upper(),
-            "price": latest_bar.close,
-            "date": latest_bar.date,
-            "open": latest_bar.open,
-            "high": latest_bar.high,
-            "low": latest_bar.low,
-            "volume": latest_bar.volume
+            "price": latestBar.close,
+            "date": latestBar.date,
+            "open": latestBar.open,
+            "high": latestBar.high,
+            "low": latestBar.low,
+            "volume": latestBar.volume
         }
     except HTTPException:
         raise
@@ -262,21 +259,20 @@ async def get_options_data(symbol: str):
         if not state.daily_bars:
             raise HTTPException(status_code=404, detail="Symbol not found")
         
-        # Compute features to get ATR
         fe = FeatureEngineer()
         fe.compute_features(state)
         
-        current_price = state.daily_bars[0].close
-        atr = state.features.get("atr_14", current_price * 0.02)  # Default 2% if ATR not available
+        currentPrice = state.daily_bars[0].close
+        atr = state.features.get("atr_14", currentPrice * 0.02)
         
-        options_chains = generate_options_chain(current_price, atr)
+        optionsChains = generate_options_chain(currentPrice, atr)
         
         return {
             "success": True,
             "symbol": symbol.upper(),
-            "current_price": current_price,
+            "current_price": currentPrice,
             "atr": atr,
-            "chains": options_chains
+            "chains": optionsChains
         }
     except HTTPException:
         raise
@@ -301,12 +297,12 @@ async def get_chart_data(symbol: str, days: int = Query(30, ge=1, le=100)):
             raise HTTPException(status_code=404, detail="Symbol not found")
         
         days = min(max(1, days), 100)
-        sorted_bars = sorted(state.daily_bars, key=lambda x: x.date)
-        chart_data = sorted_bars[-days:]
+        sortedBars = sorted(state.daily_bars, key=lambda x: x.date)
+        chartData = sortedBars[-days:]
         
-        chart_points = []
-        for bar in chart_data:
-            chart_points.append({
+        chartPoints = []
+        for bar in chartData:
+            chartPoints.append({
                 "date": bar.date,
                 "open": bar.open,
                 "high": bar.high,
@@ -319,10 +315,10 @@ async def get_chart_data(symbol: str, days: int = Query(30, ge=1, le=100)):
             "success": True,
             "symbol": symbol.upper(),
             "days": days,
-            "data": chart_points,
-            "current_price": chart_points[-1]["close"] if chart_points else None,
-            "price_change": chart_points[-1]["close"] - chart_points[0]["close"] if len(chart_points) > 1 else 0,
-            "price_change_pct": ((chart_points[-1]["close"] - chart_points[0]["close"]) / chart_points[0]["close"] * 100) if len(chart_points) > 1 and chart_points[0]["close"] > 0 else 0
+            "data": chartPoints,
+            "current_price": chartPoints[-1]["close"] if chartPoints else None,
+            "price_change": chartPoints[-1]["close"] - chartPoints[0]["close"] if len(chartPoints) > 1 else 0,
+            "price_change_pct": ((chartPoints[-1]["close"] - chartPoints[0]["close"]) / chartPoints[0]["close"] * 100) if len(chartPoints) > 1 and chartPoints[0]["close"] > 0 else 0
         }
     except HTTPException:
         raise

@@ -1,282 +1,590 @@
 import os
 import sys
+import json
+import pandas as pd
+import requests
 import time
 from datetime import datetime, timedelta
-from typing import List, Dict, Any
+from typing import Dict, Any, Set
+from dotenv import load_dotenv
 
-from config import ALPHA_VANTAGE_API_KEY, BASE_URL, CALL_DELAY_SECONDS, DB_PATH
+load_dotenv()
+
+from config import DB_PATH, CACHE_DIR, KeyManager, AllKeysExhaustedException
 from data_layer import DataLayer
-from models import DailyBar, WeeklyBar
+from models import DailyBar, EarningsRecord
 
-def fetchApiData(function: str, symbol: str, apiKey: str, outputSize: str = None, **kwargs) -> Dict[str, Any]:
-    """Fetch data from Alpha Vantage API."""
-    params = {"function": function, "symbol": symbol, "apikey": apiKey, **kwargs}
-    if outputSize:
-        params["outputsize"] = outputSize
+ALPHA_VANTAGE_API_KEY = os.getenv("ALPHA_VANTAGE_API_KEY", "")
+
+CHECKPOINT_FILE = os.path.join(CACHE_DIR, "sDaily_checkpoint.json")
+
+def fetchIndicatorHistory(ticker, indicator, keyManager, interval='1day', outputsize=2000, maxRetries=3, retryDelay=60, **kwargs):
+    url = f"https://api.twelvedata.com/{indicator}"
     
-    try:
-        import requests
-        response = requests.get(BASE_URL, params=params)
-        response.raise_for_status()
-        data = response.json()
+    for attempt in range(maxRetries):
+        try:
+            apiKey = keyManager.getAvailableKey()
+        except AllKeysExhaustedException:
+            raise
         
-        if "Error Message" in data:
-            return None
-        if "Note" in data:
-            noteLower = data["Note"].lower()
-            if "rate limit" in noteLower or "premium" in noteLower:
+        params = {
+            'symbol': ticker,
+            'interval': interval,
+            'outputsize': outputsize,
+            'apikey': apiKey
+        }
+        params.update(kwargs)
+        
+        try:
+            response = requests.get(url, params=params)
+            data = response.json()
+            
+            if data.get('status') == 'error':
+                message = data.get('message', 'Unknown error')
+                
+                if 'rate limit' in message.lower() or 'api credits' in message.lower():
+                    keyManager.markRateLimited(apiKey)
+                    if keyManager.getAvailableCount() > 0:
+                        continue
+                    else:
+                        raise AllKeysExhaustedException("All API keys exhausted")
+                else:
+                    return None
+            
+            if 'values' in data and len(data['values']) > 0:
+                return data['values']
+            else:
                 return None
-        
-        time.sleep(CALL_DELAY_SECONDS)
-        return data
-    except Exception as e:
-        return None
+                
+        except AllKeysExhaustedException:
+            raise
+        except Exception as e:
+            if attempt < maxRetries - 1:
+                time.sleep(retryDelay)
+            return None
+    
+    return None
 
-def updateDailyBars(symbol: str, dataLayer: DataLayer, apiKey: str) -> Dict[str, Any]:
-    """Check daily bars every day, update only if new data available."""
+def fetchTimeSeriesData(ticker, keyManager, maxRetries=3, retryDelay=60):
+    url = "https://api.twelvedata.com/time_series"
+    
+    for attempt in range(maxRetries):
+        try:
+            apiKey = keyManager.getAvailableKey()
+        except AllKeysExhaustedException:
+            raise
+        
+        params = {
+            'symbol': ticker,
+            'interval': '1day',
+            'outputsize': '2000',
+            'apikey': apiKey
+        }
+        
+        try:
+            response = requests.get(url, params=params)
+            data = response.json()
+            
+            if data.get('status') == 'error':
+                message = data.get('message', 'Unknown error')
+                
+                if 'rate limit' in message.lower() or 'api credits' in message.lower():
+                    keyManager.markRateLimited(apiKey)
+                    if keyManager.getAvailableCount() > 0:
+                        continue
+                    else:
+                        raise AllKeysExhaustedException("All API keys exhausted")
+                else:
+                    return None
+            
+            if 'values' in data:
+                df = pd.DataFrame(data['values'])
+                df['datetime'] = pd.to_datetime(df['datetime'])
+                numericCols = ['open', 'high', 'low', 'close', 'volume']
+                for col in numericCols:
+                    df[col] = pd.to_numeric(df[col])
+                
+                df = df.rename(columns={
+                    'datetime': 'Date',
+                    'open': 'Open',
+                    'high': 'High',
+                    'low': 'Low',
+                    'close': 'Close',
+                    'volume': 'Volume'
+                })
+                
+                fiveYearsAgo = datetime.now() - timedelta(days=5*365)
+                df = df[df['Date'] >= fiveYearsAgo]
+                df['Stock_Name'] = ticker
+                df = df.sort_values('Date')
+                
+                return df
+            else:
+                return None
+                
+        except AllKeysExhaustedException:
+            raise
+        except Exception as e:
+            if attempt < maxRetries - 1:
+                time.sleep(retryDelay)
+            return None
+    
+    return None
+
+def fetchAllIndicators(ticker, keyManager):
+    indicatorsData = {}
+    intervals = ['1day', '1week', '1month']
+    
+    for interval in intervals:
+        try:
+            rsiData = fetchIndicatorHistory(ticker, 'rsi', keyManager, interval=interval, time_period=14)
+        except AllKeysExhaustedException:
+            raise
+        if rsiData:
+            df = pd.DataFrame(rsiData)
+            df['datetime'] = pd.to_datetime(df['datetime'])
+            indicatorsData[f'RSI_{interval}'] = df.set_index('datetime')['rsi']
+        time.sleep(1.2)
+        
+        try:
+            macdData = fetchIndicatorHistory(ticker, 'macd', keyManager, interval=interval, fast_period=12, slow_period=26, signal_period=9)
+        except AllKeysExhaustedException:
+            raise
+        if macdData:
+            df = pd.DataFrame(macdData)
+            df['datetime'] = pd.to_datetime(df['datetime'])
+            indicatorsData[f'MACD_{interval}'] = df.set_index('datetime')['macd']
+            indicatorsData[f'MACD_Signal_{interval}'] = df.set_index('datetime')['macd_signal']
+            indicatorsData[f'MACD_Hist_{interval}'] = df.set_index('datetime')['macd_hist']
+        time.sleep(1.2)
+        
+        try:
+            bbData = fetchIndicatorHistory(ticker, 'bbands', keyManager, interval=interval, time_period=20, sd=2)
+        except AllKeysExhaustedException:
+            raise
+        if bbData:
+            df = pd.DataFrame(bbData)
+            df['datetime'] = pd.to_datetime(df['datetime'])
+            indicatorsData[f'BB_Upper_{interval}'] = df.set_index('datetime')['upper_band']
+            indicatorsData[f'BB_Middle_{interval}'] = df.set_index('datetime')['middle_band']
+            indicatorsData[f'BB_Lower_{interval}'] = df.set_index('datetime')['lower_band']
+        time.sleep(1.2)
+    
+    smaPeriods = [55, 89, 144, 233]
+    for period in smaPeriods:
+        try:
+            smaData = fetchIndicatorHistory(ticker, 'sma', keyManager, interval='1day', time_period=period, series_type='close')
+        except AllKeysExhaustedException:
+            raise
+        if smaData:
+            df = pd.DataFrame(smaData)
+            df['datetime'] = pd.to_datetime(df['datetime'])
+            indicatorsData[f'SMA_{period}'] = df.set_index('datetime')['sma']
+        time.sleep(1.2)
+    
+    return indicatorsData
+
+def fetchEarnings(ticker, maxRetries=3, retryDelay=5):
+    """Fetch earnings data from Alpha Vantage API"""
+    if not ALPHA_VANTAGE_API_KEY:
+        print(f"Warning: ALPHA_VANTAGE_API_KEY not set. Skipping earnings fetch for {ticker}")
+        return []
+    
+    url = "https://www.alphavantage.co/query"
+    
+    for attempt in range(maxRetries):
+        params = {
+            'function': 'EARNINGS',
+            'symbol': ticker,
+            'apikey': ALPHA_VANTAGE_API_KEY
+        }
+        
+        try:
+            response = requests.get(url, params=params)
+            data = response.json()
+            
+            if 'Error Message' in data:
+                print(f"Error fetching earnings for {ticker}: {data['Error Message']}")
+                return []
+            
+            if 'Note' in data:
+                if attempt < maxRetries - 1:
+                    waitTime = retryDelay * (attempt + 1)
+                    print(f"Rate limit hit for {ticker}. Waiting {waitTime}s...")
+                    time.sleep(waitTime)
+                    continue
+                else:
+                    print(f"Rate limit exceeded for {ticker}. Skipping earnings fetch.")
+                    return []
+            
+            if 'Information' in data:
+                print(f"API call frequency limit reached for {ticker}. Skipping earnings fetch.")
+                return []
+            
+            earningsRecords = []
+            
+            if 'quarterlyEarnings' in data and isinstance(data['quarterlyEarnings'], list):
+                for item in data['quarterlyEarnings']:
+                    try:
+                        fiscalDateEnding = item.get('fiscalDateEnding', '')
+                        reportedDate = item.get('reportedDate', '')
+                        
+                        reportedEps = None
+                        if item.get('reportedEPS') and item['reportedEPS'] not in [None, '', 'None']:
+                            reportedEps = float(item['reportedEPS'])
+                        
+                        estimatedEps = None
+                        if item.get('estimatedEPS') and item['estimatedEPS'] not in [None, '', 'None']:
+                            estimatedEps = float(item['estimatedEPS'])
+                        
+                        surprise = None
+                        if item.get('surprise') and item['surprise'] not in [None, '', 'None']:
+                            surprise = float(item['surprise'])
+                        
+                        surprisePercentage = None
+                        if item.get('surprisePercentage') and item['surprisePercentage'] not in [None, '', 'None']:
+                            surprisePercentage = float(item['surprisePercentage'])
+                        
+                        if fiscalDateEnding:
+                            earningsRecord = EarningsRecord(
+                                fiscal_date_ending=fiscalDateEnding,
+                                reported_date=reportedDate,
+                                reported_eps=reportedEps,
+                                estimated_eps=estimatedEps,
+                                surprise=surprise,
+                                surprise_percentage=surprisePercentage
+                            )
+                            earningsRecords.append(earningsRecord)
+                    except (ValueError, KeyError, TypeError) as e:
+                        continue
+                
+                return earningsRecords
+            else:
+                return []
+                
+        except Exception as e:
+            print(f"Exception fetching earnings for {ticker}: {e}")
+            if attempt < maxRetries - 1:
+                time.sleep(retryDelay)
+            return []
+    
+    return []
+
+def mergeIndicatorsWithPriceData(priceDf, indicatorsData):
+    if priceDf is None or priceDf.empty:
+        return priceDf
+    
+    df = priceDf.copy()
+    df = df.set_index('Date')
+    df = df.sort_index()
+    
+    for indicatorName, indicatorSeries in indicatorsData.items():
+        if indicatorSeries is not None and len(indicatorSeries) > 0:
+            indicatorDf = indicatorSeries.to_frame(indicatorName)
+            indicatorDf = indicatorDf.sort_index()
+            
+            df = df.join(indicatorDf, how='left')
+            
+            if '1week' in indicatorName or '1month' in indicatorName:
+                df[indicatorName] = df[indicatorName].ffill()
+    
+    df = df.reset_index()
+    
+    if 'index' in df.columns and 'Date' not in df.columns:
+        df = df.rename(columns={'index': 'Date'})
+    
+    df['Symbol'] = df['Stock_Name']
+    df['Fetch_Time'] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    
+    return df
+
+def loadCheckpoint() -> Set[str]:
+    if os.path.exists(CHECKPOINT_FILE):
+        try:
+            with open(CHECKPOINT_FILE, 'r') as f:
+                data = json.load(f)
+                return set(data.get('completedSymbols', []))
+        except Exception as e:
+            print(f"Warning: Could not load checkpoint: {e}")
+    return set()
+
+def saveCheckpoint(completedSymbols: Set[str]):
+    try:
+        with open(CHECKPOINT_FILE, 'w') as f:
+            json.dump({'completedSymbols': list(completedSymbols), 'lastUpdate': datetime.now().isoformat()}, f)
+    except Exception as e:
+        print(f"Warning: Could not save checkpoint: {e}")
+
+def clearCheckpoint():
+    if os.path.exists(CHECKPOINT_FILE):
+        try:
+            os.remove(CHECKPOINT_FILE)
+        except Exception as e:
+            print(f"Warning: Could not clear checkpoint: {e}")
+
+def updateDailyBars(symbol: str, dataLayer: DataLayer, keyManager: KeyManager) -> Dict[str, Any]:
     latestDateInDb = dataLayer.get_latest_date(symbol, "daily_bars")
     
-    # Always fetch latest data to check
-    dailyData = fetchApiData("TIME_SERIES_DAILY", symbol, apiKey, "compact")
-    if not dailyData or "Time Series (Daily)" not in dailyData:
+    try:
+        priceDf = fetchTimeSeriesData(symbol, keyManager)
+    except AllKeysExhaustedException:
+        raise
+    if priceDf is None or priceDf.empty:
         return {"success": False, "newDays": 0, "updated": False, "reason": "API fetch failed"}
     
-    fetchedBars = dataLayer._parse_daily_bars(dailyData)
-    if not fetchedBars:
-        return {"success": False, "newDays": 0, "updated": False, "reason": "Parse failed"}
+    priceDf['Date'] = pd.to_datetime(priceDf['Date'])
     
-    # Get latest date from fetched data
-    latestDateFromApi = fetchedBars[0].date if fetchedBars else None
-    
-    # Check if we have new data
     if latestDateInDb:
         latestDateInDbDt = datetime.strptime(latestDateInDb, "%Y-%m-%d")
-        latestDateFromApiDt = datetime.strptime(latestDateFromApi, "%Y-%m-%d")
-        
-        if latestDateFromApiDt <= latestDateInDbDt:
-            return {"success": True, "newDays": 0, "updated": False, "latestDate": latestDateInDb, "reason": "Already up to date"}
-        
-        # Filter to only new bars
-        newBars = [b for b in fetchedBars if datetime.strptime(b.date, "%Y-%m-%d") > latestDateInDbDt]
+        newPriceDf = priceDf[priceDf['Date'] > latestDateInDbDt]
     else:
-        # No existing data, store all
-        newBars = fetchedBars
+        newPriceDf = priceDf
+    
+    if newPriceDf.empty:
+        return {"success": True, "newDays": 0, "updated": False, "latestDate": latestDateInDb, "reason": "Already up to date"}
+    
+    newBars = []
+    for _, row in newPriceDf.iterrows():
+        newBars.append(DailyBar(
+            date=row['Date'].strftime("%Y-%m-%d"),
+            open=float(row['Open']),
+            high=float(row['High']),
+            low=float(row['Low']),
+            close=float(row['Close']),
+            volume=int(row['Volume'])
+        ))
     
     if newBars:
         dataLayer.store_daily_bars(symbol, newBars)
-        return {"success": True, "newDays": len(newBars), "updated": True, "latestDate": newBars[-1].date}
+        latestNewDate = newBars[-1].date
+        return {"success": True, "newDays": len(newBars), "updated": True, "latestDate": latestNewDate}
     else:
         return {"success": True, "newDays": 0, "updated": False, "latestDate": latestDateInDb}
 
-def updateWeeklyBars(symbol: str, dataLayer: DataLayer, apiKey: str) -> Dict[str, Any]:
-    """Check weekly bars every day, update only if new data available."""
-    latestDateInDb = dataLayer.get_latest_date(symbol, "weekly_bars")
-    
-    # Always fetch latest data to check
-    weeklyData = fetchApiData("TIME_SERIES_WEEKLY", symbol, apiKey)
-    if not weeklyData or "Weekly Time Series" not in weeklyData:
-        return {"success": False, "updated": False, "reason": "API fetch failed"}
-    
-    weeklyBars = dataLayer._parse_weekly_bars(weeklyData)
-    if not weeklyBars:
-        return {"success": False, "updated": False, "reason": "Parse failed"}
-    
-    # Get latest date from fetched data
-    latestDateFromApi = weeklyBars[0].date if weeklyBars else None
-    
-    # Check if we have new data
-    if latestDateInDb:
-        latestDateInDbDt = datetime.strptime(latestDateInDb, "%Y-%m-%d")
-        latestDateFromApiDt = datetime.strptime(latestDateFromApi, "%Y-%m-%d")
-        
-        if latestDateFromApiDt <= latestDateInDbDt:
-            return {"success": True, "updated": False, "reason": "Already up to date"}
-        
-        # Filter to only new bars
-        fiveYearsAgo = datetime.now() - timedelta(days=5*365)
-        newBars = [b for b in weeklyBars if datetime.strptime(b.date, "%Y-%m-%d") > latestDateInDbDt and datetime.strptime(b.date, "%Y-%m-%d") >= fiveYearsAgo]
-    else:
-        # No existing data, filter to 5 years and store all
-        fiveYearsAgo = datetime.now() - timedelta(days=5*365)
-        newBars = [b for b in weeklyBars if datetime.strptime(b.date, "%Y-%m-%d") >= fiveYearsAgo]
-    
-    if newBars:
-        dataLayer.store_weekly_bars(symbol, newBars)
-        return {"success": True, "updated": True, "count": len(newBars), "latestDate": newBars[-1].date}
-    else:
-        return {"success": True, "updated": False, "reason": "No new data"}
-
-def updateDailyIndicators(symbol: str, dataLayer: DataLayer, apiKey: str, forceUpdate: bool = False) -> Dict[str, Any]:
-    """Check daily indicators every day, update only if new data or daily bars were updated."""
-    # Get daily bars for MACD calculation
-    dailyBars = dataLayer.get_daily_bars(symbol)
-    if not dailyBars or len(dailyBars) < 35:
-        return {"success": False, "updated": False, "reason": "Not enough daily bars for indicators"}
-    
-    # Check latest indicator date
+def updateDailyIndicators(symbol: str, dataLayer: DataLayer, keyManager: KeyManager, forceUpdate: bool = False) -> Dict[str, Any]:
     latestIndicatorDate = dataLayer.get_latest_date(symbol, "daily_indicators")
-    latestBarDate = dailyBars[-1].date if dailyBars else None
+    latestBarDate = dataLayer.get_latest_date(symbol, "daily_bars")
     
-    # Only update if we have new bars or force update
     if not forceUpdate and latestIndicatorDate and latestBarDate:
         latestIndicatorDateDt = datetime.strptime(latestIndicatorDate, "%Y-%m-%d")
         latestBarDateDt = datetime.strptime(latestBarDate, "%Y-%m-%d")
         if latestBarDateDt <= latestIndicatorDateDt:
             return {"success": True, "updated": False, "reason": "Indicators up to date"}
     
-    # Calculate MACD from bars
-    macdCalculated = dataLayer.calculate_macd_for_all_dates(dailyBars)
+    try:
+        priceDf = fetchTimeSeriesData(symbol, keyManager)
+    except AllKeysExhaustedException:
+        raise
+    if priceDf is None or priceDf.empty:
+        return {"success": False, "updated": False, "reason": "No price data available"}
     
-    # Fetch RSI and STOCHRSI from API
-    rsiData = fetchApiData("RSI", symbol, apiKey, interval="daily", time_period=14, series_type="close")
-    rsiParsed = dataLayer._parse_technical(rsiData, "RSI") if rsiData else {}
+    priceDf['Date'] = pd.to_datetime(priceDf['Date'])
     
-    stochRsiData = fetchApiData("STOCHRSI", symbol, apiKey, interval="daily", time_period=14,
-                                series_type="close", fastkperiod=5, fastdperiod=3, fastdmatype=1)
-    stochRsiParsed = dataLayer._parse_technical(stochRsiData, "STOCHRSI") if stochRsiData else {}
+    historicalBars = dataLayer.get_daily_bars(symbol)
+    if not historicalBars:
+        return {"success": False, "updated": False, "reason": "No historical bars found in database"}
     
-    # Store all indicators
-    if macdCalculated or rsiParsed or stochRsiParsed:
-        dataLayer.store_daily_indicators(symbol, rsiParsed, stochRsiParsed, macdCalculated)
-        return {"success": True, "updated": True, "macdCount": len(macdCalculated), "rsiCount": len(rsiParsed), "stochCount": len(stochRsiParsed)}
-    else:
-        return {"success": False, "updated": False, "reason": "No indicator data to store"}
-
-def updateWeeklyIndicators(symbol: str, dataLayer: DataLayer, apiKey: str, forceUpdate: bool = False) -> Dict[str, Any]:
-    """Check weekly indicators every day, update only if new data or weekly bars were updated."""
-    weeklyBars = dataLayer.get_weekly_bars(symbol)
-    if not weeklyBars or len(weeklyBars) < 35:
-        return {"success": False, "updated": False, "reason": "Not enough weekly bars for indicators"}
+    historicalDf = pd.DataFrame([{
+        'Date': pd.to_datetime(bar.date),
+        'Open': bar.open,
+        'High': bar.high,
+        'Low': bar.low,
+        'Close': bar.close,
+        'Volume': bar.volume
+    } for bar in historicalBars])
     
-    # Check latest indicator date
-    latestIndicatorDate = dataLayer.get_latest_date(symbol, "weekly_indicators")
-    latestBarDate = weeklyBars[-1].date if weeklyBars else None
-    
-    # Only update if we have new bars or force update
-    if not forceUpdate and latestIndicatorDate and latestBarDate:
+    if latestIndicatorDate:
         latestIndicatorDateDt = datetime.strptime(latestIndicatorDate, "%Y-%m-%d")
-        latestBarDateDt = datetime.strptime(latestBarDate, "%Y-%m-%d")
-        if latestBarDateDt <= latestIndicatorDateDt:
-            return {"success": True, "updated": False, "reason": "Indicators up to date"}
-    
-    # Calculate MACD from bars
-    macdCalculated = dataLayer.calculate_macd_for_weekly(weeklyBars)
-    
-    # Fetch RSI from API
-    rsiData = fetchApiData("RSI", symbol, apiKey, interval="weekly", time_period=14, series_type="close")
-    rsiParsed = dataLayer._parse_technical(rsiData, "RSI") if rsiData else {}
-    
-    # Store indicators
-    if macdCalculated or rsiParsed:
-        dataLayer.store_weekly_indicators(symbol, rsiParsed, macdCalculated)
-        return {"success": True, "updated": True, "macdCount": len(macdCalculated), "rsiCount": len(rsiParsed)}
+        newPriceDf = priceDf[priceDf['Date'] > latestIndicatorDateDt]
     else:
-        return {"success": False, "updated": False, "reason": "No indicator data to store"}
-
-def updateEarnings(symbol: str, dataLayer: DataLayer, apiKey: str) -> Dict[str, Any]:
-    """Update earnings data."""
-    earningsData = fetchApiData("EARNINGS", symbol, apiKey)
-    if not earningsData:
-        return {"success": False, "reason": "API fetch failed"}
+        newPriceDf = priceDf
     
-    earningsRecords = dataLayer._parse_earnings(earningsData)
-    if earningsRecords:
-        dataLayer.store_earnings(symbol, earningsRecords)
-        return {"success": True, "count": len(earningsRecords)}
+    if newPriceDf.empty:
+        return {"success": True, "updated": False, "reason": "Indicators up to date"}
+    
+    fullPriceDf = pd.concat([historicalDf, newPriceDf], ignore_index=True)
+    fullPriceDf = fullPriceDf.drop_duplicates(subset=['Date'], keep='last')
+    fullPriceDf = fullPriceDf.sort_values('Date')
+    fullPriceDf['Stock_Name'] = symbol
+    
+    try:
+        indicatorsData = fetchAllIndicators(symbol, keyManager)
+    except AllKeysExhaustedException:
+        raise
+    if not indicatorsData:
+        return {"success": False, "updated": False, "reason": "No indicator data fetched"}
+    
+    mergedDf = mergeIndicatorsWithPriceData(fullPriceDf, indicatorsData)
+    if mergedDf is None or mergedDf.empty:
+        return {"success": False, "updated": False, "reason": "Failed to merge indicators"}
+    
+    if latestIndicatorDate:
+        latestIndicatorDateDt = datetime.strptime(latestIndicatorDate, "%Y-%m-%d")
+        newMergedDf = mergedDf[mergedDf['Date'] > latestIndicatorDateDt]
     else:
-        return {"success": False, "reason": "No earnings data"}
+        newMergedDf = mergedDf
+    
+    if newMergedDf.empty:
+        return {"success": True, "updated": False, "reason": "No new indicator data to store"}
+    
+    dataLayer.storeDailyIndicators(symbol, newMergedDf)
+    
+    indicatorCount = len([col for col in newMergedDf.columns if any(x in col for x in ['RSI_', 'MACD_', 'BB_'])])
+    return {"success": True, "updated": True, "indicatorCount": indicatorCount, "recordCount": len(newMergedDf)}
 
-def updateSymbol(symbol: str, apiKey: str) -> Dict[str, Any]:
-    """Update all data for a single symbol."""
+def updateEarnings(symbol: str, dataLayer: DataLayer) -> Dict[str, Any]:
+    """Fetch and store earnings data for a symbol using Alpha Vantage API"""
+    try:
+        earningsRecords = fetchEarnings(symbol)
+        if earningsRecords:
+            dataLayer.store_earnings(symbol, earningsRecords)
+            return {"success": True, "updated": True, "count": len(earningsRecords)}
+        else:
+            return {"success": True, "updated": False, "reason": "No earnings data available"}
+    except Exception as e:
+        return {"success": False, "updated": False, "reason": f"Error fetching earnings: {e}"}
+
+def updateSymbol(symbol: str, keyManager: KeyManager) -> Dict[str, Any]:
     symbol = symbol.upper()
-    # Initialize database and create tables if not exist
     dataLayer = DataLayer()
     
     result = {
         "symbol": symbol,
         "dailyBars": {},
-        "weeklyBars": {},
         "dailyIndicators": {},
-        "weeklyIndicators": {},
         "earnings": {},
         "success": True
     }
     
-    # 1. Check daily bars - update only if new data
-    dailyResult = updateDailyBars(symbol, dataLayer, apiKey)
-    result["dailyBars"] = dailyResult
-    if dailyResult.get("updated"):
-        print(f"[{symbol}] Daily bars: +{dailyResult['newDays']} days (latest: {dailyResult.get('latestDate', 'N/A')})")
-    else:
-        print(f"[{symbol}] Daily bars: {dailyResult.get('reason', 'Up to date')}")
-    
-    # 2. Check weekly bars - update only if new data
-    weeklyResult = updateWeeklyBars(symbol, dataLayer, apiKey)
-    result["weeklyBars"] = weeklyResult
-    if weeklyResult.get("updated"):
-        print(f"[{symbol}] Weekly bars: +{weeklyResult.get('count', 0)} bars (latest: {weeklyResult.get('latestDate', 'N/A')})")
-    else:
-        print(f"[{symbol}] Weekly bars: {weeklyResult.get('reason', 'Up to date')}")
-    
-    # 3. Check daily indicators - update only if daily bars were updated or new data
-    dailyIndResult = updateDailyIndicators(symbol, dataLayer, apiKey, forceUpdate=dailyResult.get("updated", False))
-    result["dailyIndicators"] = dailyIndResult
-    if dailyIndResult.get("updated"):
-        print(f"[{symbol}] Daily indicators: Updated - MACD({dailyIndResult.get('macdCount', 0)}), RSI({dailyIndResult.get('rsiCount', 0)}), STOCH({dailyIndResult.get('stochCount', 0)})")
-    else:
-        print(f"[{symbol}] Daily indicators: {dailyIndResult.get('reason', 'Up to date')}")
-    
-    # 4. Check weekly indicators - update only if weekly bars were updated or new data
-    weeklyIndResult = updateWeeklyIndicators(symbol, dataLayer, apiKey, forceUpdate=weeklyResult.get("updated", False))
-    result["weeklyIndicators"] = weeklyIndResult
-    if weeklyIndResult.get("updated"):
-        print(f"[{symbol}] Weekly indicators: Updated - MACD({weeklyIndResult.get('macdCount', 0)}), RSI({weeklyIndResult.get('rsiCount', 0)})")
-    else:
-        print(f"[{symbol}] Weekly indicators: {weeklyIndResult.get('reason', 'Up to date')}")
-    
-    # 5. Update earnings (optional, less frequent)
-    # earningsResult = updateEarnings(symbol, dataLayer, apiKey)
-    # result["earnings"] = earningsResult
+    try:
+        dailyResult = updateDailyBars(symbol, dataLayer, keyManager)
+        result["dailyBars"] = dailyResult
+        if dailyResult.get("updated"):
+            print(f"[{symbol}] Daily bars: +{dailyResult['newDays']} days (latest: {dailyResult.get('latestDate', 'N/A')})")
+        else:
+            print(f"[{symbol}] Daily bars: {dailyResult.get('reason', 'Up to date')}")
+        
+        dailyIndResult = updateDailyIndicators(symbol, dataLayer, keyManager, forceUpdate=dailyResult.get("updated", False))
+        result["dailyIndicators"] = dailyIndResult
+        if dailyIndResult.get("updated"):
+            print(f"[{symbol}] Daily indicators: Updated - {dailyIndResult.get('indicatorCount', 0)} indicators, {dailyIndResult.get('recordCount', 0)} records")
+        else:
+            print(f"[{symbol}] Daily indicators: {dailyIndResult.get('reason', 'Up to date')}")
+        
+        earningsResult = updateEarnings(symbol, dataLayer)
+        result["earnings"] = earningsResult
+        if earningsResult.get("updated"):
+            print(f"[{symbol}] Earnings: Updated - {earningsResult.get('count', 0)} records")
+        else:
+            print(f"[{symbol}] Earnings: {earningsResult.get('reason', 'Up to date')}")
+        
+        if dailyIndResult.get("success") and dailyResult.get("success"):
+            result["success"] = True
+        else:
+            result["success"] = False
+    except KeyboardInterrupt:
+        print(f"\n[{symbol}] Interrupted by user")
+        raise
+    except Exception as e:
+        print(f"[{symbol}] Error: {e}")
+        result["success"] = False
+        result["error"] = str(e)
+        raise
     
     return result
 
 def main():
-    """Main entry point."""
-    # Ensure database and tables are initialized
     os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
-    DataLayer()  # Initialize database and create tables
-
-    apiKey = ALPHA_VANTAGE_API_KEY
+    DataLayer()
+    
+    keyManager = KeyManager()
+    print(f"Initialized KeyManager with {len(keyManager.apiKeys)} API key(s)\n")
+    
+    completedSymbols = loadCheckpoint()
+    if completedSymbols:
+        print(f"Resuming from checkpoint: {len(completedSymbols)} symbols already completed")
+        print(f"Completed: {', '.join(sorted(completedSymbols))}\n")
+    
     symbols = []
-
-    # If no symbols provided, use default batch list
+    
     if len(sys.argv) < 2:
-        symbols = ["AAPL", "NVDA", "PANW", "RH", "AVGO", "MSTR", "COIN", "BLK", "ADBE", "MDB", "ASML", "TSLA"]
-        print(f"No symbols provided, defaulting to: {', '.join(symbols)}\n")
-    elif sys.argv[1] == "--watchlist":
-        symbols = ['AAPL', 'NVDA', 'PANW', 'AVGO', 'ADBE', 'MDB', 'ASML', 'TSLA', 'BLK', 'RH', 'MSTR', 'COIN']
-        print(f"Updating watchlist: {', '.join(symbols)}\n")
+        allSymbols = ["AAPL", "NVDA", "PANW", "RH", "AVGO", "MSTR", "COIN", "BLK", "ADBE", "MDB", "ASML", "TSLA"]
+        # allSymbols = ["AAPL"]
+        
+        if '--clear-checkpoint' in sys.argv:
+            clearCheckpoint()
+            completedSymbols = set()
+            symbols = allSymbols
+            print("Checkpoint cleared. Processing all symbols.\n")
+        else:
+            symbols = [s for s in allSymbols if s not in completedSymbols]
+            if not symbols:
+                print("All symbols already completed. Use --clear-checkpoint to reset.\n")
+                return
+            print(f"No symbols provided, defaulting to: {', '.join(allSymbols)}")
+            print(f"Processing remaining: {', '.join(symbols)}\n")
     else:
-        symbols = [s.upper() for s in sys.argv[1:]]
+        symbols = [s.upper() for s in sys.argv[1:] if s != '--clear-checkpoint']
+        if '--clear-checkpoint' in sys.argv:
+            clearCheckpoint()
+            completedSymbols = set()
+        symbols = [s for s in symbols if s not in completedSymbols]
+        if not symbols:
+            print("All specified symbols already completed. Use --clear-checkpoint to reset.\n")
+            return
         print(f"Updating symbols: {', '.join(symbols)}\n")
-
+    
     startTime = datetime.now()
     results = []
-
-    for symbol in symbols:
-        try:
-            result = updateSymbol(symbol, apiKey)
-            results.append(result)
-        except Exception as e:
-            print(f"[{symbol}] Error: {e}")
-            results.append({"symbol": symbol, "success": False, "error": str(e)})
-
-    # Summary
+    
+    try:
+        for symbol in symbols:
+            try:
+                result = updateSymbol(symbol, keyManager)
+                results.append(result)
+                
+                if result.get("success"):
+                    completedSymbols.add(symbol)
+                    saveCheckpoint(completedSymbols)
+                    print(f"[{symbol}] ✓ Completed and saved to checkpoint\n")
+                else:
+                    print(f"[{symbol}] ✗ Failed - will retry on next run\n")
+            except AllKeysExhaustedException as e:
+                print(f"\n\n[ERROR] All API keys exhausted: {e}")
+                print(f"Progress saved to checkpoint.")
+                print(f"Completed: {', '.join(sorted(completedSymbols))}")
+                print(f"Remaining: {', '.join([s for s in symbols if s not in completedSymbols])}")
+                keyManager.saveKeys()
+                sys.exit(1)
+            except KeyboardInterrupt:
+                print(f"\n\nInterrupted. Progress saved to checkpoint.")
+                print(f"Completed: {', '.join(sorted(completedSymbols))}")
+                print(f"Remaining: {', '.join([s for s in symbols if s not in completedSymbols])}")
+                sys.exit(1)
+            except Exception as e:
+                print(f"[{symbol}] Error: {e}")
+                results.append({"symbol": symbol, "success": False, "error": str(e)})
+                print(f"[{symbol}] ✗ Failed - will retry on next run\n")
+    except AllKeysExhaustedException as e:
+        print(f"\n\n[ERROR] All API keys exhausted: {e}")
+        print(f"Progress saved to checkpoint.")
+        print(f"Completed: {', '.join(sorted(completedSymbols))}")
+        keyManager.saveKeys()
+        sys.exit(1)
+    except KeyboardInterrupt:
+        print(f"\n\nInterrupted. Progress saved to checkpoint.")
+        print(f"Completed: {', '.join(sorted(completedSymbols))}")
+        sys.exit(1)
+    
     elapsed = (datetime.now() - startTime).total_seconds()
     print(f"\n{'='*60}")
-    print(f"Completed: {len(symbols)} symbols in {elapsed:.1f}s")
+    print(f"Completed: {len([r for r in results if r.get('success')])}/{len(symbols)} symbols in {elapsed:.1f}s")
     print(f"{'='*60}")
+    
+    keyManager.saveKeys()
+    
+    if completedSymbols:
+        print(f"\nCheckpoint saved. Completed symbols: {', '.join(sorted(completedSymbols))}")
 
 if __name__ == "__main__":
     main()
-
