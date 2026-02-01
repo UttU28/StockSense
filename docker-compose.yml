@@ -9,9 +9,10 @@ services:
       - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
       - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
       - AWS_DEFAULT_REGION=us-east-1
-      - TWELVE_DATA_API_KEY=${TWELVE_DATA_API_KEY} # Optional since we hardcoded rotating keys, but good practice
+      - API_SOURCE=${API_SOURCE:-yahoo}  # yahoo or twelve
     volumes:
       - ./stock_gita_engine_charts:/app/stock_gita_engine_charts # For live reloading if needed
+      - ./credentials.json:/app/credentials.json  # Mount credentials.json for Twelve Data API keys
 
   open-webui:
     image: ghcr.io/open-webui/open-webui:main

@@ -16,6 +16,22 @@ import mplfinance as mpf
 # Add parent path import logic if needed
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
+# Import config FIRST to ensure credentials are loaded at startup
+# This will trigger credentials loading and logging immediately
+from stock_gita_engine_charts.config import API_SOURCE
+
+# Force credentials initialization at module import time if using Twelve Data
+# This ensures logs appear BEFORE FastAPI startup messages
+if API_SOURCE == "twelve":
+    try:
+        from stock_gita_engine_charts.data.credentials_manager import get_credentials_manager
+        # Force initialization now, not later
+        _ = get_credentials_manager()
+        sys.stdout.flush()
+    except Exception as e:
+        print(f"Warning: Could not initialize credentials at import time: {e}")
+        sys.stdout.flush()
+
 from stock_gita_engine_charts.llm.agent import get_agent_executor
 from stock_gita_engine_charts.llm.specialized_agents import get_master_agent, MASTER_PROMPT_EXPORT
 from stock_gita_engine_charts.api_ticker import router as ticker_router
@@ -34,6 +50,29 @@ app.add_middleware(
 
 # Mount ticker API router
 app.include_router(ticker_router)
+
+# Initialize credentials and API at startup
+@app.on_event("startup")
+async def startup_event():
+    """Initialize credentials manager and API on startup."""
+    import sys
+    # Force initialization of credentials manager if using Twelve Data
+    if API_SOURCE == "twelve":
+        try:
+            from stock_gita_engine_charts.data.credentials_manager import get_credentials_manager
+            # This will trigger the credentials loading and logging
+            # Flush stdout to ensure logs appear immediately
+            sys.stdout.flush()
+            cred_manager = get_credentials_manager()
+            key_count = cred_manager.get_key_count()
+            sys.stdout.flush()
+            if key_count > 0:
+                # Pre-initialize the API to ensure credentials are loaded
+                _ = USMarketAPI()
+                sys.stdout.flush()
+        except Exception as e:
+            print(f"Warning: Could not initialize credentials at startup: {e}")
+            sys.stdout.flush()
 
 # Initialize Agents
 print("Initializing Agents...")

@@ -43,6 +43,7 @@ venv.bak/
 .env
 .env.local
 .env.*.local
+credentials.json
 
 # Database files
 *.db
