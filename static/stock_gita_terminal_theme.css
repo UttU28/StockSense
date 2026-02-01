@@ -1,0 +1,580 @@
+/* 
+ * Stock Gita Professional Trading Terminal Theme
+ * Bloomberg Terminal-inspired dark theme for extended trading sessions
+ * Version: 1.0
+ */
+
+:root {
+  /* ============================================
+     PRIMARY COLOR PALETTE
+     ============================================ */
+  
+  /* Background Colors - Deep Navy Theme */
+  --sg-bg-primary: #0A0E1A;        /* Main background - Deep navy */
+  --sg-bg-secondary: #121826;       /* Card/Panel background */
+  --sg-bg-tertiary: #1A1F33;        /* Hover states & elevated surfaces */
+  --sg-bg-elevated: #242B42;        /* Modal/dropdown backgrounds */
+  
+  /* Accent Colors - Financial Data Visualization */
+  --sg-accent-bullish: #00FF88;     /* Neon green - Gains/Bullish signals */
+  --sg-accent-bearish: #FF3366;     /* Vibrant red - Losses/Bearish signals */
+  --sg-accent-neutral: #00BFFF;     /* Cyan - Neutral info/links */
+  --sg-accent-warning: #FFB800;     /* Amber - Warnings/Alerts */
+  --sg-accent-info: #4A90E2;        /* Blue - Information */
+  
+  /* Text Colors - High Contrast for Extended Reading */
+  --sg-text-primary: #E4E9F2;       /* Primary text - High contrast */
+  --sg-text-secondary: #8B92A8;     /* Secondary text - Labels */
+  --sg-text-tertiary: #5A607D;      /* Tertiary text - Timestamps/metadata */
+  --sg-text-disabled: #3A4059;      /* Disabled text */
+  
+  /* Chart & Data Visualization */
+  --sg-chart-grid: #1E2537;         /* Subtle grid lines */
+  --sg-chart-candle-up: #26A69A;    /* Bullish candles - Teal */
+  --sg-chart-candle-down: #EF5350;  /* Bearish candles - Red */
+  --sg-chart-volume: #4A5568;       /* Volume bars */
+  
+  /* Border & Separator Colors */
+  --sg-border-primary: #2A3247;     /* Primary borders */
+  --sg-border-secondary: #1E2537;   /* Subtle separators */
+  --sg-border-accent: #00BFFF40;    /* Accent borders (with opacity) */
+  
+  /* ============================================
+     TYPOGRAPHY
+     ============================================ */
+  
+  /* Font Families */
+  --sg-font-heading: 'Inter', 'SF Pro Display', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+  --sg-font-data: 'JetBrains Mono', 'Fira Code', 'Monaco', 'Courier New', monospace;
+  --sg-font-body: 'Inter', 'Segoe UI', -apple-system, system-ui, sans-serif;
+  
+  /* Font Sizes */
+  --sg-text-xs: 11px;    /* Micro labels, timestamps */
+  --sg-text-sm: 13px;    /* Secondary information */
+  --sg-text-md: 15px;    /* Body text */
+  --sg-text-lg: 18px;    /* Subheadings */
+  --sg-text-xl: 24px;    /* Main headings */
+  --sg-text-2xl: 32px;   /* Hero numbers, prices */
+  
+  /* Font Weights */
+  --sg-weight-regular: 400;
+  --sg-weight-medium: 500;
+  --sg-weight-semibold: 600;
+  --sg-weight-bold: 700;
+  
+  /* ============================================
+     SPACING SYSTEM
+     ============================================ */
+  
+  --sg-space-xs: 4px;
+  --sg-space-sm: 8px;
+  --sg-space-md: 16px;
+  --sg-space-lg: 24px;
+  --sg-space-xl: 32px;
+  --sg-space-2xl: 48px;
+  
+  /* ============================================
+     BORDER RADIUS
+     ============================================ */
+  
+  --sg-radius-sm: 4px;
+  --sg-radius-md: 8px;
+  --sg-radius-lg: 12px;
+  --sg-radius-full: 9999px;
+  
+  /* ============================================
+     SHADOWS
+     ============================================ */
+  
+  --sg-shadow-sm: 0 2px 4px rgba(0, 0, 0, 0.3);
+  --sg-shadow-md: 0 4px 8px rgba(0, 0, 0, 0.4);
+  --sg-shadow-lg: 0 8px 16px rgba(0, 0, 0, 0.5);
+  --sg-shadow-glow-bullish: 0 0 20px rgba(0, 255, 136, 0.3);
+  --sg-shadow-glow-bearish: 0 0 20px rgba(255, 51, 102, 0.3);
+}
+
+/* ============================================
+   GLOBAL OVERRIDES - Open WebUI Base
+   ============================================ */
+
+body {
+  background-color: var(--sg-bg-primary) !important;
+  color: var(--sg-text-primary) !important;
+  font-family: var(--sg-font-body) !important;
+  font-size: var(--sg-text-md) !important;
+  line-height: 1.6 !important;
+}
+
+/* Main Content Area */
+.main-content,
+.chat-container,
+#main-content {
+  background-color: var(--sg-bg-primary) !important;
+}
+
+/* Cards and Panels */
+.card,
+.panel,
+.message-container {
+  background-color: var(--sg-bg-secondary) !important;
+  border: 1px solid var(--sg-border-primary) !important;
+  border-radius: var(--sg-radius-md) !important;
+  box-shadow: var(--sg-shadow-sm) !important;
+}
+
+/* ============================================
+   SIDEBAR STYLING
+   ============================================ */
+
+.sidebar,
+nav,
+aside {
+  background-color: var(--sg-bg-secondary) !important;
+  border-right: 1px solid var(--sg-border-primary) !important;
+}
+
+.sidebar-item:hover,
+.nav-item:hover {
+  background-color: var(--sg-bg-tertiary) !important;
+  border-left: 3px solid var(--sg-accent-neutral) !important;
+}
+
+/* ============================================
+   CHAT MESSAGES & ANALYSIS OUTPUT
+   ============================================ */
+
+/* User Messages */
+.user-message,
+.message.user {
+  background-color: var(--sg-bg-tertiary) !important;
+  border-left: 3px solid var(--sg-accent-neutral) !important;
+  color: var(--sg-text-primary) !important;
+  font-family: var(--sg-font-body) !important;
+}
+
+/* AI/Assistant Messages */
+.assistant-message,
+.message.assistant,
+.bot-message {
+  background-color: var(--sg-bg-secondary) !important;
+  border-left: 3px solid var(--sg-accent-info) !important;
+  color: var(--sg-text-primary) !important;
+}
+
+/* ============================================
+   DATA TABLES & TRADING INDICATORS
+   ============================================ */
+
+table {
+  background-color: var(--sg-bg-secondary) !important;
+  border-collapse: separate !important;
+  border-spacing: 0 !important;
+  border-radius: var(--sg-radius-md) !important;
+  overflow: hidden !important;
+}
+
+thead th {
+  background-color: var(--sg-bg-tertiary) !important;
+  color: var(--sg-text-secondary) !important;
+  font-family: var(--sg-font-heading) !important;
+  font-size: var(--sg-text-sm) !important;
+  font-weight: var(--sg-weight-semibold) !important;
+  text-transform: uppercase !important;
+  letter-spacing: 0.5px !important;
+  padding: var(--sg-space-sm) var(--sg-space-md) !important;
+  border-bottom: 2px solid var(--sg-border-primary) !important;
+}
+
+tbody td {
+  padding: var(--sg-space-sm) var(--sg-space-md) !important;
+  border-bottom: 1px solid var(--sg-border-secondary) !important;
+  font-family: var(--sg-font-data) !important;
+  font-size: var(--sg-text-sm) !important;
+  color: var(--sg-text-primary) !important;
+}
+
+tbody tr:hover {
+  background-color: var(--sg-bg-tertiary) !important;
+}
+
+/* Number columns - ensure monospaced alignment */
+td.number,
+td.price,
+td.percentage,
+.numeric-data {
+  font-family: var(--sg-font-data) !important;
+  text-align: right !important;
+  font-variant-numeric: tabular-nums !important;
+}
+
+/* ============================================
+   COLOR-CODED VALUES
+   ============================================ */
+
+/* Positive/Bullish values */
+.positive,
+.bullish,
+.gain,
+.buy-signal {
+  color: var(--sg-accent-bullish) !important;
+  font-weight: var(--sg-weight-semibold) !important;
+}
+
+/* Negative/Bearish values */
+.negative,
+.bearish,
+.loss,
+.sell-signal {
+  color: var(--sg-accent-bearish) !important;
+  font-weight: var(--sg-weight-semibold) !important;
+}
+
+/* Neutral values */
+.neutral,
+.wait-signal {
+  color: var(--sg-text-secondary) !important;
+}
+
+/* Warning/Alert values */
+.warning,
+.alert {
+  color: var(--sg-accent-warning) !important;
+  font-weight: var(--sg-weight-semibold) !important;
+}
+
+/* ============================================
+   BUTTONS & INTERACTIVE ELEMENTS
+   ============================================ */
+
+button,
+.button,
+.btn {
+  background-color: var(--sg-bg-tertiary) !important;
+  color: var(--sg-text-primary) !important;
+  border: 1px solid var(--sg-border-primary) !important;
+  border-radius: var(--sg-radius-sm) !important;
+  padding: var(--sg-space-sm) var(--sg-space-md) !important;
+  font-family: var(--sg-font-body) !important;
+  font-size: var(--sg-text-sm) !important;
+  font-weight: var(--sg-weight-medium) !important;
+  cursor: pointer !important;
+  transition: all 0.2s ease !important;
+}
+
+button:hover,
+.button:hover,
+.btn:hover {
+  background-color: var(--sg-bg-elevated) !important;
+  border-color: var(--sg-accent-neutral) !important;
+  transform: translateY(-1px) !important;
+  box-shadow: var(--sg-shadow-md) !important;
+}
+
+/* Primary action button */
+button.primary,
+.button.primary,
+.btn-primary {
+  background-color: var(--sg-accent-neutral) !important;
+  color: var(--sg-bg-primary) !important;
+  border-color: var(--sg-accent-neutral) !important;
+  font-weight: var(--sg-weight-semibold) !important;
+}
+
+button.primary:hover {
+  background-color: #0099CC !important;
+  box-shadow: var(--sg-shadow-glow-bullish) !important;
+}
+
+/* ============================================
+   INPUT FIELDS
+   ============================================ */
+
+input,
+textarea,
+select {
+  background-color: var(--sg-bg-tertiary) !important;
+  color: var(--sg-text-primary) !important;
+  border: 1px solid var(--sg-border-primary) !important;
+  border-radius: var(--sg-radius-sm) !important;
+  padding: var(--sg-space-sm) var(--sg-space-md) !important;
+  font-family: var(--sg-font-body) !important;
+  font-size: var(--sg-text-md) !important;
+}
+
+input:focus,
+textarea:focus,
+select:focus {
+  outline: none !important;
+  border-color: var(--sg-accent-neutral) !important;
+  box-shadow: 0 0 0 2px rgba(0, 191, 255, 0.2) !important;
+}
+
+/* Chat input specific */
+.chat-input,
+#message-input,
+textarea.message-input {
+  background-color: var(--sg-bg-secondary) !important;
+  border: 2px solid var(--sg-border-primary) !important;
+  font-size: var(--sg-text-md) !important;
+  padding: var(--sg-space-md) !important;
+}
+
+/* ============================================
+   CODE BLOCKS & PRE-FORMATTED TEXT
+   ============================================ */
+
+code {
+  background-color: var(--sg-bg-tertiary) !important;
+  color: var(--sg-accent-bullish) !important;
+  padding: 2px 6px !important;
+  border-radius: var(--sg-radius-sm) !important;
+  font-family: var(--sg-font-data) !important;
+  font-size: 0.9em !important;
+}
+
+pre {
+  background-color: var(--sg-bg-tertiary) !important;
+  border: 1px solid var(--sg-border-primary) !important;
+  border-radius: var(--sg-radius-md) !important;
+  padding: var(--sg-space-md) !important;
+  overflow-x: auto !important;
+}
+
+pre code {
+  background-color: transparent !important;
+  padding: 0 !important;
+  color: var(--sg-text-primary) !important;
+  font-family: var(--sg-font-data) !important;
+  font-size: var(--sg-text-sm) !important;
+}
+
+/* ============================================
+   SCROLLBARS - Custom Dark Theme
+   ============================================ */
+
+::-webkit-scrollbar {
+  width: 12px !important;
+  height: 12px !important;
+  background-color: var(--sg-bg-primary) !important;
+}
+
+::-webkit-scrollbar-track {
+  background-color: var(--sg-bg-secondary) !important;
+}
+
+::-webkit-scrollbar-thumb {
+  background-color: var(--sg-bg-tertiary) !important;
+  border-radius: var(--sg-radius-full) !important;
+  border: 2px solid var(--sg-bg-secondary) !important;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background-color: var(--sg-bg-elevated) !important;
+}
+
+/* Firefox scrollbar */
+* {
+  scrollbar-width: thin !important;
+  scrollbar-color: var(--sg-bg-tertiary) var(--sg-bg-secondary) !important;
+}
+
+/* ============================================
+   LINKS & ANCHORS
+   ============================================ */
+
+a {
+  color: var(--sg-accent-neutral) !important;
+  text-decoration: none !important;
+  transition: color 0.2s ease !important;
+}
+
+a:hover {
+  color: var(--sg-accent-bullish) !important;
+  text-decoration: underline !important;
+}
+
+/* ============================================
+   HEADER & BRANDING
+   ============================================ */
+
+header,
+.header,
+.navbar {
+  background-color: var(--sg-bg-secondary) !important;
+  border-bottom: 1px solid var(--sg-border-primary) !important;
+  box-shadow: var(--sg-shadow-md) !important;
+}
+
+/* Logo area */
+.logo,
+.brand {
+  font-family: var(--sg-font-heading) !important;
+  font-size: var(--sg-text-xl) !important;
+  font-weight: var(--sg-weight-bold) !important;
+  color: var(--sg-text-primary) !important;
+}
+
+/* ============================================
+   TOOLTIPS & POPOVERS
+   ============================================ */
+
+.tooltip,
+.popover {
+  background-color: var(--sg-bg-elevated) !important;
+  color: var(--sg-text-primary) !important;
+  border: 1px solid var(--sg-border-primary) !important;
+  border-radius: var(--sg-radius-md) !important;
+  box-shadow: var(--sg-shadow-lg) !important;
+  padding: var(--sg-space-sm) var(--sg-space-md) !important;
+  font-size: var(--sg-text-sm) !important;
+}
+
+/* ============================================
+   MODALS & OVERLAYS
+   ============================================ */
+
+.modal,
+.dialog {
+  background-color: var(--sg-bg-secondary) !important;
+  border: 1px solid var(--sg-border-primary) !important;
+  border-radius: var(--sg-radius-lg) !important;
+  box-shadow: var(--sg-shadow-lg) !important;
+}
+
+.modal-overlay,
+.backdrop {
+  background-color: rgba(10, 14, 26, 0.85) !important;
+  backdrop-filter: blur(8px) !important;
+}
+
+/* ============================================
+   BADGES & PILLS
+   ============================================ */
+
+.badge,
+.pill,
+.tag {
+  padding: var(--sg-space-xs) var(--sg-space-sm) !important;
+  border-radius: var(--sg-radius-full) !important;
+  font-size: var(--sg-text-xs) !important;
+  font-weight: var(--sg-weight-semibold) !important;
+  text-transform: uppercase !important;
+  letter-spacing: 0.5px !important;
+}
+
+.badge.bullish {
+  background-color: rgba(0, 255, 136, 0.15) !important;
+  color: var(--sg-accent-bullish) !important;
+  border: 1px solid var(--sg-accent-bullish) !important;
+}
+
+.badge.bearish {
+  background-color: rgba(255, 51, 102, 0.15) !important;
+  color: var(--sg-accent-bearish) !important;
+  border: 1px solid var(--sg-accent-bearish) !important;
+}
+
+.badge.neutral {
+  background-color: rgba(139, 146, 168, 0.15) !important;
+  color: var(--sg-text-secondary) !important;
+  border: 1px solid var(--sg-text-secondary) !important;
+}
+
+/* ============================================
+   ANIMATIONS & TRANSITIONS
+   ============================================ */
+
+.fade-in {
+  animation: fadeIn 0.3s ease-in !important;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.pulse {
+  animation: pulse 2s ease-in-out infinite !important;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.6; }
+}
+
+/* ============================================
+   UTILITY CLASSES
+   ============================================ */
+
+.text-bullish { color: var(--sg-accent-bullish) !important; }
+.text-bearish { color: var(--sg-accent-bearish) !important; }
+.text-neutral { color: var(--sg-text-secondary) !important; }
+.text-warning { color: var(--sg-accent-warning) !important; }
+
+.bg-bullish { background-color: rgba(0, 255, 136, 0.1) !important; }
+.bg-bearish { background-color: rgba(255, 51, 102, 0.1) !important; }
+
+.font-data { font-family: var(--sg-font-data) !important; }
+.font-heading { font-family: var(--sg-font-heading) !important; }
+
+.glow-bullish { box-shadow: var(--sg-shadow-glow-bullish) !important; }
+.glow-bearish { box-shadow: var(--sg-shadow-glow-bearish) !important; }
+
+/* ============================================
+   RESPONSIVE BREAKPOINTS
+   ============================================ */
+
+@media (max-width: 768px) {
+  :root {
+    --sg-text-xs: 10px;
+    --sg-text-sm: 12px;
+    --sg-text-md: 14px;
+    --sg-text-lg: 16px;
+    --sg-text-xl: 20px;
+    --sg-text-2xl: 24px;
+  }
+  
+  .sidebar {
+    display: none !important;
+  }
+  
+  table {
+    font-size: var(--sg-text-xs) !important;
+  }
+}
+
+/* ============================================
+   LOADING STATES
+   ============================================ */
+
+.loading-spinner {
+  border: 3px solid var(--sg-bg-tertiary) !important;
+  border-top-color: var(--sg-accent-neutral) !important;
+  border-radius: var(--sg-radius-full) !important;
+  animation: spin 0.8s linear infinite !important;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+/* ============================================
+   PRINT STYLES (for PDF exports)
+   ============================================ */
+
+@media print {
+  body {
+    background-color: white !important;
+    color: black !important;
+  }
+  
+  .sidebar,
+  .navbar,
+  button {
+    display: none !important;
+  }
+  
+  table {
+    border: 1px solid #000 !important;
+  }
+}
