@@ -161,13 +161,31 @@ def analyze_stock_func(symbol: str) -> str:
     Returns a detailed report including Calendar checks, SLI, Indicators, Confidence, and Signals.
     """
     try:
+        print(f"DEBUG: Starting analysis for {symbol}")
         # Pass symbol to result for formatting context
-        result = pipeline.run_full_analysis(symbol.upper())
-        if result and "symbol" not in result:
+        try:
+            result = pipeline.run_full_analysis(symbol.upper())
+            print(f"DEBUG: Pipeline returned successfully")
+        except Exception as pipeline_error:
+            print(f"DEBUG: Pipeline raised exception: {pipeline_error}")
+            import traceback
+            print(f"DEBUG: Pipeline traceback: {traceback.format_exc()}")
+            return f"Error: Pipeline failed for {symbol}: {str(pipeline_error)}"
+        
+        print(f"DEBUG: Pipeline result type: {type(result)}, value: {result}")
+        
+        if result is None:
+            return f"Error: Analysis pipeline returned None for {symbol}"
+        
+        if "error" in result:
+            return f"Error analyzing {symbol}: {result['error']}"
+        
+        if "symbol" not in result:
              result["symbol"] = symbol.upper()
              
         # Format the complex dict into a readable markdown/text prompt for the LLM
         formatted_output = format_multi_timeframe_results(result)
+        print(f"DEBUG: Formatted output length: {len(formatted_output)}")
 
         # Append Static Chart Image (Bypassing Sandbox) with Link to Interactive
         img_url = f"http://18.215.117.40/chart_img?symbol={symbol.upper()}"
@@ -185,7 +203,11 @@ def analyze_stock_func(symbol: str) -> str:
         return formatted_output
         
     except Exception as e:
-        return f"Error analyzing {symbol}: {str(e)}"
+        error_msg = f"Error analyzing {symbol}: {str(e)}"
+        print(f"DEBUG: Exception in analyze_stock_func: {error_msg}")
+        import traceback
+        print(f"DEBUG: Traceback: {traceback.format_exc()}")
+        return error_msg
 
 analyze_stock_tool = StructuredTool.from_function(
     func=analyze_stock_func,

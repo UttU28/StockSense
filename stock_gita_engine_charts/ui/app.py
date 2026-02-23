@@ -12,8 +12,9 @@ import re
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')))
 
 try:
-    from stock_gita_engine_charts.data.usa_api import TwelveDataAPI
-    # Note: trend_engine and forecast_engine may not exist - adjust imports as needed
+    from stock_gita_engine_usa.data.usa_api import TwelveDataAPI
+    from stock_gita_engine_usa.core.trend_engine import analyze_trend
+    from stock_gita_engine_usa.core.forecast_engine import generate_forecast
 except ImportError as e:
     st.error(f"Import Error: {e}")
     st.stop()

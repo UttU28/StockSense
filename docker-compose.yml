@@ -7,13 +7,13 @@ services:
       - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
       - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
       - AWS_DEFAULT_REGION=us-east-1
-      - API_SOURCE=${API_SOURCE:-yahoo}  # yahoo or twelve
+      - API_SOURCE=${API_SOURCE:-twelve}
     volumes:
-      - ./stock_gita_engine_charts:/app/stock_gita_engine_charts # For live reloading if needed
-      - ./credentials.json:/app/credentials.json  # Mount credentials.json for Twelve Data API keys
+      - ./stock_gita_engine_charts:/app/stock_gita_engine_charts
+      - ./credentials.json:/app/credentials.json
 
   open-webui:
-    image: ghcr.io/open-webui/open-webui:main
+    image: ghcr.io/open-webui/open-webui:latest
     ports:
       - "7778:8080"
     environment:

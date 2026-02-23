@@ -16,22 +16,6 @@ import mplfinance as mpf
 # Add parent path import logic if needed
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-# Import config FIRST to ensure credentials are loaded at startup
-# This will trigger credentials loading and logging immediately
-from stock_gita_engine_charts.config import API_SOURCE
-
-# Force credentials initialization at module import time if using Twelve Data
-# This ensures logs appear BEFORE FastAPI startup messages
-if API_SOURCE == "twelve":
-    try:
-        from stock_gita_engine_charts.data.credentials_manager import get_credentials_manager
-        # Force initialization now, not later
-        _ = get_credentials_manager()
-        sys.stdout.flush()
-    except Exception as e:
-        print(f"Warning: Could not initialize credentials at import time: {e}")
-        sys.stdout.flush()
-
 from stock_gita_engine_charts.llm.agent import get_agent_executor
 from stock_gita_engine_charts.llm.specialized_agents import get_master_agent, MASTER_PROMPT_EXPORT
 from stock_gita_engine_charts.api_ticker import router as ticker_router
@@ -51,28 +35,32 @@ app.add_middleware(
 # Mount ticker API router
 app.include_router(ticker_router)
 
-# Initialize credentials and API at startup
+
+# Initialize credentials at import (so "[Credentials] Loaded N keys" appears early)
+try:
+    from stock_gita_engine_charts.data.credentials_manager import get_credentials_manager
+    _ = get_credentials_manager()
+    sys.stdout.flush()
+except Exception as e:
+    print(f"Warning: Could not initialize credentials at import time: {e}")
+    sys.stdout.flush()
+
+
 @app.on_event("startup")
 async def startup_event():
-    """Initialize credentials manager and API on startup."""
-    import sys
-    # Force initialization of credentials manager if using Twelve Data
-    if API_SOURCE == "twelve":
-        try:
-            from stock_gita_engine_charts.data.credentials_manager import get_credentials_manager
-            # This will trigger the credentials loading and logging
-            # Flush stdout to ensure logs appear immediately
+    """Initialize credentials manager and API on startup (same as StockSense)."""
+    try:
+        from stock_gita_engine_charts.data.credentials_manager import get_credentials_manager
+        cred_manager = get_credentials_manager()
+        key_count = cred_manager.get_key_count()
+        sys.stdout.flush()
+        if key_count > 0:
+            _ = USMarketAPI()  # Pre-initialize so credentials/API are ready
             sys.stdout.flush()
-            cred_manager = get_credentials_manager()
-            key_count = cred_manager.get_key_count()
-            sys.stdout.flush()
-            if key_count > 0:
-                # Pre-initialize the API to ensure credentials are loaded
-                _ = USMarketAPI()
-                sys.stdout.flush()
-        except Exception as e:
-            print(f"Warning: Could not initialize credentials at startup: {e}")
-            sys.stdout.flush()
+    except Exception as e:
+        print(f"Warning: Could not initialize credentials at startup: {e}")
+        sys.stdout.flush()
+
 
 # Initialize Agents
 print("Initializing Agents...")
@@ -155,6 +143,19 @@ async def get_chart_v2(symbol: str):
                                 .replace('{{ zones_json | safe }}', zones_json)
                                 
     return HTMLResponse(content=html_content)
+
+@app.get("/chart_api/history/{symbol}")
+async def get_history(symbol: str):
+    """Fetch live OHLCV data for charting"""
+    api = USMarketAPI()
+    df = api.get_live_data(symbol, interval="1day", outputsize=500)
+    
+    if df is None or df.empty:
+        return []
+    
+    # Convert to JSON format for frontend
+    df['date'] = df['date'].dt.strftime('%Y-%m-%dT%H:%M:%SZ')
+    return df.to_dict('records')
 
 import pandas_ta as ta
 import mplfinance as mpf

@@ -23,7 +23,7 @@ class CredentialsManager:
         """
         if credentials_file is None:
             # Look for credentials.json in multiple locations
-            # 1. Project root (where .gitignore is)
+            # 1. Project root (stock_gita_deploy)
             project_root = Path(__file__).resolve().parent.parent.parent
             credentials_file = project_root / "credentials.json"
             
@@ -101,7 +101,7 @@ class CredentialsManager:
                         cred["exhausted_at"] = None
                         if key in self.exhausted_keys:
                             del self.exhausted_keys[key]
-                except Exception as e:
+                except Exception:
                     # Invalid format, clear it
                     cred["exhausted_at"] = None
             
@@ -127,7 +127,6 @@ class CredentialsManager:
                     exhausted_at = cred.get("exhausted_at")
                     
                     if exhausted_at:
-                        # Key is exhausted
                         try:
                             exhausted_dt = datetime.fromisoformat(exhausted_at.replace('Z', '+00:00'))
                             now = datetime.utcnow()
@@ -137,7 +136,7 @@ class CredentialsManager:
                                 status = f"Exhausted (resets in {remaining_sec}s)"
                             else:
                                 status = "Ready (exhaustion expired)"
-                        except:
+                        except Exception:
                             status = "Ready"
                     elif last_used:
                         status = f"Last used: {last_used}"
@@ -204,7 +203,6 @@ class CredentialsManager:
             True if key is exhausted and cooldown hasn't expired
         """
         def _check():
-            # Find the credential in the list
             cred = None
             for c in self.credentials:
                 if c["key"] == key:
@@ -214,57 +212,39 @@ class CredentialsManager:
             if not cred:
                 return False
             
-            # Check exhaustion time from JSON
             exhausted_at_str = cred.get("exhausted_at")
-            
-            # If exhausted_at is null or empty, key is not exhausted
             if not exhausted_at_str:
-                # Clean up from memory if it exists
                 if key in self.exhausted_keys:
                     del self.exhausted_keys[key]
                 return False
             
-            # Parse exhaustion time
             now = datetime.utcnow()
             try:
                 exhausted_at = datetime.fromisoformat(exhausted_at_str.replace('Z', '+00:00'))
-            except:
-                # Invalid format, treat as not exhausted
+            except Exception:
                 cred["exhausted_at"] = None
                 if key in self.exhausted_keys:
                     del self.exhausted_keys[key]
                 self._save_credentials()
                 return False
             
-            # Check if cooldown has expired
             if now - exhausted_at >= self.exhaustion_cooldown:
-                # Cooldown expired, clear exhaustion in JSON
                 cred["exhausted_at"] = None
                 if key in self.exhausted_keys:
                     del self.exhausted_keys[key]
                 self._save_credentials()
                 return False
             
-            # Key is still exhausted, update memory cache
             self.exhausted_keys[key] = exhausted_at
             return True
         
         if lock_held:
             return _check()
-        else:
-            with self.lock:
-                return _check()
+        with self.lock:
+            return _check()
     
     def are_all_keys_exhausted(self, lock_held: bool = False) -> bool:
-        """
-        Check if all keys are currently exhausted by reading from JSON file.
-        
-        Args:
-            lock_held: If True, assumes lock is already held (for internal use)
-        
-        Returns:
-            True if all keys are exhausted, False otherwise
-        """
+        """Check if all keys are currently exhausted."""
         def _check():
             if not self.credentials:
                 return True
@@ -273,50 +253,37 @@ class CredentialsManager:
             available_count = 0
             needs_save = False
             
-            # Check each credential's exhaustion status from JSON
             for cred in self.credentials:
                 key = cred["key"]
                 exhausted_at_str = cred.get("exhausted_at")
-                
-                # If exhausted_at is null or empty, key is available
                 if not exhausted_at_str:
                     available_count += 1
                     continue
-                
-                # Parse and check exhaustion time
                 try:
                     exhausted_at = datetime.fromisoformat(exhausted_at_str.replace('Z', '+00:00'))
-                    
-                    # Check if cooldown has expired
                     if now - exhausted_at >= self.exhaustion_cooldown:
-                        # Cooldown expired, clear exhaustion
                         cred["exhausted_at"] = None
                         if key in self.exhausted_keys:
                             del self.exhausted_keys[key]
                         available_count += 1
                         needs_save = True
                     else:
-                        # Still exhausted, update memory cache
                         self.exhausted_keys[key] = exhausted_at
-                except:
-                    # Invalid format, treat as available
+                except Exception:
                     cred["exhausted_at"] = None
                     if key in self.exhausted_keys:
                         del self.exhausted_keys[key]
                     available_count += 1
                     needs_save = True
             
-            # Save if we cleared any exhaustions
             if needs_save:
                 self._save_credentials()
-            
             return available_count == 0
         
         if lock_held:
             return _check()
-        else:
-            with self.lock:
-                return _check()
+        with self.lock:
+            return _check()
     
     def get_available_key(self) -> Optional[str]:
         """
@@ -328,58 +295,35 @@ class CredentialsManager:
         with self.lock:
             if not self.credentials:
                 return None
-            
-            # Check if all keys are exhausted (lock already held)
             if self.are_all_keys_exhausted(lock_held=True):
                 return None
             
-            # Try to find an available key (max attempts = number of keys)
             attempts = 0
             while attempts < len(self.credentials):
                 cred = self.credentials[self.current_index]
                 key = cred["key"]
-                
-                # Check if this key is exhausted (reads from JSON, lock already held)
                 if not self.is_key_exhausted(key, lock_held=True):
-                    # Key is available, use it
-                    key_num = self.current_index + 1
-                    total_keys = len(self.credentials)
-                    
-                    # Update last_used timestamp in JSON
                     cred["last_used"] = datetime.utcnow().isoformat()
-                    
-                    # Move to next key (round-robin)
                     self.current_index = (self.current_index + 1) % len(self.credentials)
-                    
-                    # Save updated credentials to JSON
                     self._save_credentials()
-                    
                     return key
-                
-                # This key is exhausted, try next one
                 self.current_index = (self.current_index + 1) % len(self.credentials)
                 attempts += 1
-            
-            # All keys are exhausted
             return None
     
     def _save_credentials(self):
         """Save credentials back to JSON file."""
         try:
-            # Convert None to null for JSON compatibility
             credentials_to_save = []
             for cred in self.credentials:
                 cred_copy = cred.copy()
-                # Ensure None values are preserved (JSON will convert to null)
                 if cred_copy.get("last_used") is None:
                     cred_copy["last_used"] = None
                 if cred_copy.get("exhausted_at") is None:
                     cred_copy["exhausted_at"] = None
                 credentials_to_save.append(cred_copy)
-            
             with open(self.credentials_file, 'w') as f:
                 json.dump(credentials_to_save, f, indent=2)
-            # Don't log every save to reduce noise - only log on errors
         except Exception as e:
             print(f"[Credentials] Warning: Could not save credentials.json: {e}")
     
@@ -390,7 +334,6 @@ class CredentialsManager:
             self.current_index = 0
 
 
-# Global instance
 _credentials_manager: Optional[CredentialsManager] = None
 
 

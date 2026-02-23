@@ -1,124 +1,328 @@
 import pandas as pd
-import yfinance as yf
 import requests
-import concurrent.futures
+from datetime import datetime, timedelta
 from typing import Optional, Dict
-from ..config import API_SOURCE
-from .credentials_manager import get_credentials_manager
+import time
+
+# Try to import yfinance
+try:
+    import yfinance as yf
+    YFINANCE_AVAILABLE = True
+except ImportError:
+    YFINANCE_AVAILABLE = False
+
+# Twelve Data key cycling (credentials.json)
+try:
+    from .credentials_manager import get_credentials_manager
+    _CREDENTIALS_AVAILABLE = True
+except ImportError:
+    _CREDENTIALS_AVAILABLE = False
 
 
-class YahooFinanceAPI:
+class MassiveAPI:
     """
-    Yahoo Finance API implementation using yfinance library.
-    Free tier with no API key required.
+    Wrapper for Massive API - provides OHLC data and technical indicators.
+    Twelve Data API is used for earnings; keys are cycled via credentials.json when present.
     """
     
-    def __init__(self):
-        self.api_name = "yahoo"
+    BASE_URL = "https://api.massive.com"
     
+    def __init__(self, api_key: str = None):
+        from config import MASSIVE_API_KEY, TWELVE_DATA_API_KEY
+        self.api_key = api_key or MASSIVE_API_KEY
+        # Twelve Data: use credentials.json rotation if available, else single key from env
+        self._twelve_use_rotation = False
+        self.twelve_data_api_key = None
+        if _CREDENTIALS_AVAILABLE:
+            self._credentials_manager = get_credentials_manager()
+            if self._credentials_manager.get_key_count() > 0:
+                self._twelve_use_rotation = True
+        if not self._twelve_use_rotation:
+            self.twelve_data_api_key = TWELVE_DATA_API_KEY
+    
+    def _request(self, endpoint: str, params: dict = None) -> Optional[dict]:
+        """Make API request with error handling."""
+        params = params or {}
+        params["apiKey"] = self.api_key
+        
+        try:
+            url = f"{self.BASE_URL}{endpoint}"
+            resp = requests.get(url, params=params, timeout=30)
+            if resp.status_code == 200:
+                return resp.json()
+            print(f"Massive API error: {resp.status_code} - {resp.text}")
+            return None
+        except Exception as e:
+            print(f"Massive API exception: {e}")
+            return None
+
+    def _get_twelve_data_key(self) -> Optional[str]:
+        """Get Twelve Data API key: from rotation (credentials.json) or single key."""
+        if self._twelve_use_rotation:
+            return self._credentials_manager.get_next_key()
+        return self.twelve_data_api_key
+
+    def _fetch_twelvedata_earnings(self, symbol: str) -> Optional[dict]:
+        """
+        Fetches earnings data from TwelveData API as fallback.
+        Uses credentials.json key rotation when available; marks key exhausted on rate limit.
+        """
+        api_key = self._get_twelve_data_key()
+        if not api_key:
+            print("[Twelve Data] No API key available (add keys to credentials.json or set TWELVE_DATA_API_KEY)")
+            return None
+        try:
+            url = "https://api.twelvedata.com/earnings"
+            params = {"symbol": symbol, "apikey": api_key}
+            resp = requests.get(url, params=params, timeout=30)
+
+            if resp.status_code == 200:
+                data = resp.json()
+                # Check for rate limit in JSON body
+                if isinstance(data, dict) and data.get("status") == "error":
+                    msg = (data.get("message") or "").lower()
+                    if any(p in msg for p in ["rate limit", "rate_limit", "too many requests", "quota exceeded", "429"]):
+                        if self._twelve_use_rotation:
+                            self._credentials_manager.mark_key_exhausted(api_key)
+                        print(f"[Twelve Data] Rate limit for key ...{api_key[-4:]}")
+                        return None
+                return data
+
+            if resp.status_code == 429:
+                if self._twelve_use_rotation:
+                    self._credentials_manager.mark_key_exhausted(api_key)
+                print(f"[Twelve Data] Rate limit (429) for key ...{api_key[-4:]}")
+                return None
+            print(f"TwelveData API error: {resp.status_code} - {resp.text}")
+            return None
+        except Exception as e:
+            print(f"TwelveData API exception: {e}")
+            return None
+
+    def _normalize_earnings_data(self, data: dict, source: str) -> Optional[pd.DataFrame]:
+        """
+        Normalizes earnings data from different API sources into consistent DataFrame format.
+
+        Args:
+            data: Raw API response dictionary
+            source: API source identifier ("tmx" or "twelvedata")
+
+        Returns:
+            Normalized DataFrame with consistent schema or None if data is invalid
+
+        Output Schema:
+            - date: datetime - The earnings date (normalized from various source formats)
+        """
+        try:
+            dates = []
+
+            if source == "tmx":
+                # Parse TMX response format: extract earnings dates from results array
+                if not data or "results" not in data:
+                    print(f"Failed to normalize earnings data from {source}: missing 'results' field")
+                    return None
+
+                results = data.get("results", [])
+                if not results:
+                    print(f"Failed to normalize earnings data from {source}: empty results array")
+                    return None
+
+                for event in results:
+                    event_date = event.get("event_date")
+                    if event_date:
+                        dates.append(event_date)
+
+            elif source == "twelvedata":
+                # Parse TwelveData response format: extract dates from earnings array
+                if not data or "earnings" not in data:
+                    print(f"Failed to normalize earnings data from {source}: missing 'earnings' field")
+                    return None
+
+                earnings = data.get("earnings", [])
+                if not earnings:
+                    print(f"Failed to normalize earnings data from {source}: empty earnings array")
+                    return None
+
+                for earning in earnings:
+                    date = earning.get("date")
+                    if date:
+                        dates.append(date)
+
+            else:
+                print(f"Failed to normalize earnings data: unknown source '{source}'")
+                return None
+
+            if not dates:
+                print(f"Failed to normalize earnings data from {source}: no valid dates found")
+                return None
+
+            # Convert date strings to pandas datetime and create DataFrame
+            df = pd.DataFrame({"date": dates})
+            df["date"] = pd.to_datetime(df["date"])
+
+            return df
+
+        except Exception as e:
+            print(f"Failed to normalize earnings data from {source}: {e}")
+            return None
+
+
+
     def get_live_data(self, symbol: str, interval: str = "1day", outputsize: int = 500) -> Optional[pd.DataFrame]:
         """
-        Fetches OHLCV data using YFinance.
+        Fetches OHLCV data from Massive API.
         """
         # Map intervals
         tf_map = {
-            "1day": "1d", 
-            "1week": "1wk", 
-            "1month": "1mo",
-            "daily": "1d",
-            "weekly": "1wk",
-            "monthly": "1mo"
+            "1day": "day", "daily": "day",
+            "1week": "week", "weekly": "week", 
+            "1month": "month", "monthly": "month",
+            "1hour": "hour", "hourly": "hour"
         }
-        yf_interval = tf_map.get(interval.lower(), "1d")
+        timespan = tf_map.get(interval.lower(), "day")
         
-        # Determine period correctly
-        period = "10y"
-        if yf_interval == "1wk": period = "5y"
-        if yf_interval == "1mo": period = "max"
+        # Date range - request recent data based on outputsize
+        to_date = datetime.now().strftime("%Y-%m-%d")
+        if timespan == "day":
+            # For daily, request outputsize * 1.5 days to account for weekends/holidays
+            days_back = int(outputsize * 1.5)
+        elif timespan == "week":
+            days_back = outputsize * 7 * 2  # weeks * 7 days * 2 for buffer
+        elif timespan == "month":
+            days_back = outputsize * 30 * 2  # months * 30 days * 2 for buffer
+        else:
+            days_back = outputsize * 2
         
-        try:
-            ticker = yf.Ticker(symbol)
-            df = ticker.history(period=period, interval=yf_interval)
-            
-            if df.empty:
-                print(f"Yahoo Finance: No data found for {symbol}")
-                return None
-            
-            # Reset index
-            df = df.reset_index()
-            
-            # Normalize column names
-            df.columns = [c.lower() for c in df.columns]
-            
-            # Handle date column name
-            if 'date' not in df.columns and 'datetime' in df.columns:
-                 df.rename(columns={'datetime': 'date'}, inplace=True)
-            
-            # Ensure required columns exist
-            required_cols = ['date', 'open', 'high', 'low', 'close', 'volume']
-            
-            # Check for missing columns
-            missing = [c for c in required_cols if c not in df.columns]
-            if missing:
-                # Some symbols/indices might lack Volume
-                if 'volume' in missing and len(missing) == 1:
-                     df['volume'] = 0
-                else:
-                    print(f"Yahoo Finance Warning: Missing columns {missing}. Found: {df.columns}")
-                    return None
-                
-            # Filter and Clean
-            df = df[required_cols]
-            
-            # Remove timezone
-            if pd.api.types.is_datetime64_any_dtype(df['date']):
-                 df['date'] = df['date'].dt.tz_localize(None)
-            else:
-                 df['date'] = pd.to_datetime(df['date']).dt.tz_localize(None)
-            
-            for c in ['open', 'high', 'low', 'close', 'volume']:
-                df[c] = pd.to_numeric(df[c])
-                
-            # Limit output size
-            if len(df) > outputsize:
-                df = df.iloc[-outputsize:]
-            
-            # Sort ascending
-            df = df.sort_values('date').reset_index(drop=True)
-            
-            return df
-            
-        except Exception as e:
-            print(f"Yahoo Finance Exception for {symbol}: {e}")
+        # Cap at 2 years max to avoid API issues
+        days_back = min(days_back, 730)
+        from_date = (datetime.now() - timedelta(days=days_back)).strftime("%Y-%m-%d")
+        
+        endpoint = f"/v2/aggs/ticker/{symbol}/range/1/{timespan}/{from_date}/{to_date}"
+        params = {"adjusted": "true", "sort": "asc", "limit": min(outputsize, 5000)}
+        
+        data = self._request(endpoint, params)
+        if not data or data.get("status") != "OK" or not data.get("results"):
+            print(f"Massive API: No data for {symbol}")
             return None
+        
+        # Parse results
+        df = pd.DataFrame(data["results"])
+        df.rename(columns={
+            "t": "date", "o": "open", "h": "high", 
+            "l": "low", "c": "close", "v": "volume"
+        }, inplace=True)
+        
+        # Convert timestamp to datetime
+        df["date"] = pd.to_datetime(df["date"], unit="ms")
+        
+        # Select and order columns
+        df = df[["date", "open", "high", "low", "close", "volume"]]
+        
+        # Limit to outputsize
+        if len(df) > outputsize:
+            df = df.iloc[-outputsize:]
+        
+        return df.reset_index(drop=True)
+
+    def get_rsi(self, symbol: str, window: int = 14, limit: int = 100) -> Optional[pd.DataFrame]:
+        """Get RSI indicator from Massive API."""
+        endpoint = f"/v1/indicators/rsi/{symbol}"
+        params = {"timespan": "day", "window": window, "series_type": "close", "adjusted": "true", "limit": limit, "order": "desc"}
+        
+        data = self._request(endpoint, params)
+        if not data or not data.get("results", {}).get("values"):
+            return None
+        
+        df = pd.DataFrame(data["results"]["values"])
+        df.rename(columns={"timestamp": "date", "value": "rsi"}, inplace=True)
+        df["date"] = pd.to_datetime(df["date"], unit="ms")
+        return df
+
+    def get_macd(self, symbol: str, limit: int = 100) -> Optional[pd.DataFrame]:
+        """Get MACD indicator from Massive API."""
+        endpoint = f"/v1/indicators/macd/{symbol}"
+        params = {"timespan": "day", "adjusted": "true", "limit": limit, "order": "desc"}
+        
+        data = self._request(endpoint, params)
+        if not data or not data.get("results", {}).get("values"):
+            return None
+        
+        df = pd.DataFrame(data["results"]["values"])
+        df.rename(columns={"timestamp": "date", "value": "macd", "signal": "macd_signal", "histogram": "macd_hist"}, inplace=True)
+        df["date"] = pd.to_datetime(df["date"], unit="ms")
+        return df
+
+    def get_sma(self, symbol: str, window: int = 50, limit: int = 100) -> Optional[pd.DataFrame]:
+        """Get SMA indicator from Massive API."""
+        endpoint = f"/v1/indicators/sma/{symbol}"
+        params = {"timespan": "day", "window": window, "series_type": "close", "adjusted": "true", "limit": limit, "order": "desc"}
+        
+        data = self._request(endpoint, params)
+        if not data or not data.get("results", {}).get("values"):
+            return None
+        
+        df = pd.DataFrame(data["results"]["values"])
+        df.rename(columns={"timestamp": "date", "value": f"sma_{window}"}, inplace=True)
+        df["date"] = pd.to_datetime(df["date"], unit="ms")
+        return df
+
+    def get_ema(self, symbol: str, window: int = 20, limit: int = 100) -> Optional[pd.DataFrame]:
+        """Get EMA indicator from Massive API."""
+        endpoint = f"/v1/indicators/ema/{symbol}"
+        params = {"timespan": "day", "window": window, "series_type": "close", "adjusted": "true", "limit": limit, "order": "desc"}
+        
+        data = self._request(endpoint, params)
+        if not data or not data.get("results", {}).get("values"):
+            return None
+        
+        df = pd.DataFrame(data["results"]["values"])
+        df.rename(columns={"timestamp": "date", "value": f"ema_{window}"}, inplace=True)
+        df["date"] = pd.to_datetime(df["date"], unit="ms")
+        return df
+
+    def get_all_indicators(self, symbol: str) -> Dict[str, pd.DataFrame]:
+        """Fetch all available indicators for a symbol."""
+        indicators = {}
+        
+        # Fetch each indicator
+        rsi = self.get_rsi(symbol)
+        if rsi is not None:
+            indicators["rsi"] = rsi
+        
+        macd = self.get_macd(symbol)
+        if macd is not None:
+            indicators["macd"] = macd
+        
+        sma_50 = self.get_sma(symbol, window=50)
+        if sma_50 is not None:
+            indicators["sma_50"] = sma_50
+        
+        sma_200 = self.get_sma(symbol, window=200)
+        if sma_200 is not None:
+            indicators["sma_200"] = sma_200
+        
+        ema_20 = self.get_ema(symbol, window=20)
+        if ema_20 is not None:
+            indicators["ema_20"] = ema_20
+        
+        return indicators
 
     def get_multi_timeframe_data(self, symbol: str) -> Dict[str, pd.DataFrame]:
-        """
-        Fetches Daily, Weekly, and Monthly data SEQUENTIALLY.
-        Sequential execution is safer for yfinance on shared IPs to avoid 429/Blocking.
-        """
-        timeframes = {
-            "DAILY": "1day",
-            "WEEKLY": "1week",
-            "MONTHLY": "1month"
-        }
-        
+        """Fetches Daily, Weekly, and Monthly data."""
+        timeframes = {"DAILY": "1day", "WEEKLY": "1week", "MONTHLY": "1month"}
         results = {}
-        # Execute sequentially
+        
         for name, tf in timeframes.items():
-            try:
-                df = self.get_live_data(symbol, interval=tf, outputsize=500)
-                results[name] = df
-            except Exception as e:
-                print(f"Error fetching {name} for {symbol}: {e}")
-                results[name] = None
-                    
+            df = self.get_live_data(symbol, interval=tf, outputsize=500)
+            results[name] = df
+            time.sleep(0.2)  # Rate limit protection
+        
         return results
 
     def get_earnings_dates(self, symbol: str) -> Optional[pd.DataFrame]:
-        """
-        Fetches historical earnings dates using yfinance.
-        """
+        """Fetches earnings dates - falls back to yfinance."""
+        if not YFINANCE_AVAILABLE:
+            return None
         try:
             ticker = yf.Ticker(symbol)
             df = ticker.earnings_dates
@@ -130,344 +334,5 @@ class YahooFinanceAPI:
             return None
 
 
-class TwelveDataAPIImplementation:
-    """
-    Twelve Data API implementation.
-    Uses credentials.json for API key rotation.
-    """
-    
-    def __init__(self, api_key: str = None):
-        self.api_name = "twelve"
-        self.base_url = "https://api.twelvedata.com"
-        self.credentials_manager = get_credentials_manager()
-        
-        # If explicit API key provided, use it (for backward compatibility)
-        # Otherwise, use credentials manager for rotation
-        if api_key:
-            self.api_key = api_key
-            self.use_rotation = False
-        else:
-            self.api_key = None
-            self.use_rotation = True
-            
-            if self.credentials_manager.get_key_count() == 0:
-                raise ValueError("No API keys found in credentials.json. Please add keys to use Twelve Data API.")
-    
-    def _get_next_key(self):
-        """Get the next API key using rotation if enabled, otherwise return current key."""
-        if self.use_rotation:
-            return self.credentials_manager.get_next_key()
-        return self.api_key
-    
-    def get_live_data(self, symbol: str, interval: str = "1day", outputsize: int = 500) -> Optional[pd.DataFrame]:
-        """
-        Fetches OHLCV data from Twelve Data API.
-        """
-        # Map intervals to Twelve Data format
-        tf_map = {
-            "1day": "1day",
-            "1week": "1week", 
-            "1month": "1month",
-            "daily": "1day",
-            "weekly": "1week",
-            "monthly": "1month"
-        }
-        td_interval = tf_map.get(interval.lower(), "1day")
-        
-        try:
-            # Get API key (with rotation if enabled)
-            api_key = self._get_next_key()
-            if not api_key:
-                print(f"[Twelve Data] No API key available for {symbol}")
-                return None
-            
-            # Log is handled by credentials manager when key is retrieved
-            
-            url = f"{self.base_url}/time_series"
-            params = {
-                "symbol": symbol.upper(),
-                "interval": td_interval,
-                "apikey": api_key,
-                "outputsize": min(outputsize, 5000),  # Twelve Data max is 5000
-                "format": "json"
-            }
-            
-            response = requests.get(url, params=params, timeout=30)
-            
-            # Check for HTTP rate limit errors (429 Too Many Requests)
-            if response.status_code == 429:
-                print(f"[Twelve Data] Rate limit exceeded for key ending in ...{api_key[-4:]}")
-                # Mark this key as exhausted
-                if self.use_rotation:
-                    self.credentials_manager.mark_key_exhausted(api_key)
-                return None
-            
-            response.raise_for_status()
-            
-            data = response.json()
-            
-            # Check for API errors
-            if "status" in data and data["status"] == "error":
-                error_msg = data.get("message", "Unknown error")
-                
-                # Check if it's a rate limit error
-                error_msg_lower = error_msg.lower()
-                if any(phrase in error_msg_lower for phrase in [
-                    "rate limit", "rate_limit", "too many requests", 
-                    "quota exceeded", "limit exceeded", "429"
-                ]):
-                    print(f"[Twelve Data] Rate limit error for key ending in ...{api_key[-4:]}: {error_msg}")
-                    # Mark this key as exhausted
-                    if self.use_rotation:
-                        self.credentials_manager.mark_key_exhausted(api_key)
-                    return None
-                
-                print(f"[Twelve Data] API Error for {symbol}: {error_msg}")
-                return None
-            
-            # Check if we have time series data
-            if "values" not in data or not data["values"]:
-                print(f"[Twelve Data] No data found for {symbol}")
-                return None
-            
-            # Success - no logging needed (only log on errors)
-            
-            # Convert to DataFrame
-            values = data["values"]
-            df = pd.DataFrame(values)
-            
-            # Rename columns to lowercase
-            df.columns = [c.lower() for c in df.columns]
-            
-            # Map Twelve Data column names to our format
-            column_mapping = {
-                "datetime": "date",
-                "open": "open",
-                "high": "high",
-                "low": "low",
-                "close": "close",
-                "volume": "volume"
-            }
-            
-            # Rename columns
-            for old_name, new_name in column_mapping.items():
-                if old_name in df.columns:
-                    df.rename(columns={old_name: new_name}, inplace=True)
-            
-            # Ensure required columns exist
-            required_cols = ['date', 'open', 'high', 'low', 'close', 'volume']
-            missing = [c for c in required_cols if c not in df.columns]
-            if missing:
-                if 'volume' in missing and len(missing) == 1:
-                    df['volume'] = 0
-                else:
-                    print(f"Twelve Data Warning: Missing columns {missing}. Found: {df.columns}")
-                    return None
-            
-            # Filter to required columns
-            df = df[required_cols]
-            
-            # Convert date to datetime
-            df['date'] = pd.to_datetime(df['date'])
-            
-            # Convert numeric columns
-            for c in ['open', 'high', 'low', 'close', 'volume']:
-                df[c] = pd.to_numeric(df[c], errors='coerce')
-            
-            # Remove any rows with NaN values
-            df = df.dropna()
-            
-            # Limit output size
-            if len(df) > outputsize:
-                df = df.iloc[-outputsize:]
-            
-            # Sort ascending by date
-            df = df.sort_values('date').reset_index(drop=True)
-            
-            return df
-            
-        except requests.exceptions.RequestException as e:
-            print(f"Twelve Data API Request Exception for {symbol}: {e}")
-            return None
-        except Exception as e:
-            print(f"Twelve Data API Exception for {symbol}: {e}")
-            return None
-
-    def get_multi_timeframe_data(self, symbol: str) -> Dict[str, pd.DataFrame]:
-        """
-        Fetches Daily, Weekly, and Monthly data SEQUENTIALLY.
-        """
-        timeframes = {
-            "DAILY": "1day",
-            "WEEKLY": "1week",
-            "MONTHLY": "1month"
-        }
-        
-        results = {}
-        # Execute sequentially
-        for name, tf in timeframes.items():
-            try:
-                df = self.get_live_data(symbol, interval=tf, outputsize=500)
-                results[name] = df
-            except Exception as e:
-                print(f"Error fetching {name} for {symbol}: {e}")
-                results[name] = None
-                    
-        return results
-
-    def get_earnings_dates(self, symbol: str) -> Optional[pd.DataFrame]:
-        """
-        Twelve Data API doesn't provide earnings dates directly.
-        Falls back to Yahoo Finance for earnings data.
-        """
-        try:
-            # Fallback to Yahoo Finance for earnings
-            ticker = yf.Ticker(symbol)
-            df = ticker.earnings_dates
-            if df is None or df.empty:
-                return None
-            return df
-        except Exception as e:
-            print(f"Error fetching earnings for {symbol}: {e}")
-            return None
-
-
-def get_api_instance(api_key: str = None):
-    """
-    Factory function that returns the appropriate API instance based on API_SOURCE.
-    
-    Args:
-        api_key: Optional API key (for Twelve Data). If provided, uses this key instead of rotation.
-                 If None and API_SOURCE is "twelve", uses credentials.json with rotation.
-    
-    Returns:
-        API instance (YahooFinanceAPI or TwelveDataAPIImplementation)
-    """
-    if API_SOURCE == "twelve":
-        try:
-            return TwelveDataAPIImplementation(api_key=api_key)
-        except ValueError as e:
-            print(f"Error initializing Twelve Data API: {e}")
-            print("Falling back to Yahoo Finance API")
-            return YahooFinanceAPI()
-    else:
-        return YahooFinanceAPI()
-
-
-# For backward compatibility: TwelveDataAPI class that uses the factory
-class TwelveDataAPIWrapper:
-    """
-    Wrapper class for backward compatibility.
-    Automatically selects the correct API based on API_SOURCE environment variable.
-    Uses credentials.json for Twelve Data API keys when API_SOURCE=twelve.
-    Automatically falls back to Yahoo Finance when all Twelve Data keys are exhausted.
-    """
-    
-    def __init__(self, api_key: str = None):
-        self.api_key = api_key
-        self._twelve_api = None
-        self._yahoo_api = None
-        self._last_fallback_check = None
-        self._fallback_cooldown = 60  # Check every 60 seconds if we can switch back
-        
-        # Directly instantiate the correct API based on API_SOURCE to avoid recursion
-        if API_SOURCE == "twelve":
-            try:
-                self._twelve_api = TwelveDataAPIImplementation(api_key=api_key)
-                # For backward compatibility, provide api_keys attribute
-                if hasattr(self._twelve_api, 'credentials_manager'):
-                    key_count = self._twelve_api.credentials_manager.get_key_count()
-                    self.api_keys = [f"key_{i}" for i in range(key_count)]
-                else:
-                    self.api_keys = ['twelve-data-key']
-            except ValueError as e:
-                print(f"Error initializing Twelve Data API: {e}")
-                print("Falling back to Yahoo Finance API")
-                self._yahoo_api = YahooFinanceAPI()
-                self.api_keys = ['yahoo-free-tier']
-        else:
-            self._yahoo_api = YahooFinanceAPI()
-            self.api_keys = ['yahoo-free-tier']
-    
-    def _get_current_api(self):
-        """
-        Get the current API to use, with automatic fallback logic.
-        Returns Twelve Data API if available, otherwise Yahoo Finance.
-        """
-        # If API_SOURCE is not "twelve", always use Yahoo
-        if API_SOURCE != "twelve":
-            if self._yahoo_api is None:
-                self._yahoo_api = YahooFinanceAPI()
-            return self._yahoo_api
-        
-        # If we have Twelve Data API configured
-        if self._twelve_api is not None:
-            # Check if all keys are exhausted
-            if hasattr(self._twelve_api, 'credentials_manager'):
-                cred_manager = self._twelve_api.credentials_manager
-                
-                # Check if all keys are exhausted
-                if cred_manager.are_all_keys_exhausted():
-                    # All keys exhausted, use Yahoo fallback
-                    if self._yahoo_api is None:
-                        self._yahoo_api = YahooFinanceAPI()
-                    
-                    # Log fallback only once per cooldown period
-                    import time
-                    now = time.time()
-                    if self._last_fallback_check is None or (now - self._last_fallback_check) >= self._fallback_cooldown:
-                        print(f"[API Fallback] All Twelve Data keys exhausted. Using Yahoo Finance (will retry in 1 minute)")
-                        self._last_fallback_check = now
-                    
-                    return self._yahoo_api
-                else:
-                    # Keys available, use Twelve Data
-                    # Check if we were using Yahoo and can switch back
-                    if self._yahoo_api is not None and self._last_fallback_check is not None:
-                        import time
-                        now = time.time()
-                        if (now - self._last_fallback_check) >= self._fallback_cooldown:
-                            # Cooldown passed, try switching back to Twelve Data
-                            if not cred_manager.are_all_keys_exhausted():
-                                print(f"[API Fallback] Twelve Data keys available again. Switching back from Yahoo Finance")
-                                self._last_fallback_check = None
-                                return self._twelve_api
-                    
-                    return self._twelve_api
-        
-        # Fallback to Yahoo if Twelve Data not available
-        if self._yahoo_api is None:
-            self._yahoo_api = YahooFinanceAPI()
-        return self._yahoo_api
-    
-    def _get_next_key(self):
-        """For backward compatibility"""
-        current_api = self._get_current_api()
-        if hasattr(current_api, '_get_next_key'):
-            return current_api._get_next_key()
-        return getattr(current_api, 'api_key', 'yahoo')
-    
-    def get_live_data(self, symbol: str, interval: str = "1day", outputsize: int = 500) -> Optional[pd.DataFrame]:
-        current_api = self._get_current_api()
-        result = current_api.get_live_data(symbol, interval, outputsize)
-        
-        # If Twelve Data failed and we're using it, try Yahoo as fallback
-        if result is None and current_api == self._twelve_api and self._twelve_api is not None:
-            if self._yahoo_api is None:
-                self._yahoo_api = YahooFinanceAPI()
-            print(f"[API Fallback] Twelve Data failed for {symbol}, trying Yahoo Finance")
-            return self._yahoo_api.get_live_data(symbol, interval, outputsize)
-        
-        return result
-    
-    def get_multi_timeframe_data(self, symbol: str) -> Dict[str, pd.DataFrame]:
-        current_api = self._get_current_api()
-        return current_api.get_multi_timeframe_data(symbol)
-    
-    def get_earnings_dates(self, symbol: str) -> Optional[pd.DataFrame]:
-        current_api = self._get_current_api()
-        return current_api.get_earnings_dates(symbol)
-
-
-# Export the wrapper as TwelveDataAPI for backward compatibility
-TwelveDataAPI = TwelveDataAPIWrapper
+# Alias for backward compatibility
+TwelveDataAPI = MassiveAPI

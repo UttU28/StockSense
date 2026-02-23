@@ -6,7 +6,8 @@ set -e
 
 DOMAIN="rakeshent.info"
 EMAIL="admin@rakeshent.info"
-APP_DIR="$HOME/StockSense"
+# Use directory where this script lives (stock_gita_deploy)
+APP_DIR="$(cd "$(dirname "$0")" && pwd)"
 
 echo "========================================"
 echo "Stock Gita - Smart Deployment"

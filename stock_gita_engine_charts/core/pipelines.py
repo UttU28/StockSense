@@ -36,10 +36,23 @@ class TradingPipeline:
         
         # 0. Fetch Data (Multi-timeframe) - Pre-requisite
         print(f"DEBUG: Fetching data for {symbol}...")
-        data_frames = self.api.get_multi_timeframe_data(symbol)
-        df_daily = data_frames.get("DAILY")
-        if df_daily is None or df_daily.empty:
-             return {"error": f"Could not fetch data for {symbol}"}
+        try:
+            data_frames = self.api.get_multi_timeframe_data(symbol)
+            print(f"DEBUG: Got data_frames: {type(data_frames)}, keys: {list(data_frames.keys()) if data_frames else 'None'}")
+            
+            if not data_frames:
+                return {"error": f"Could not fetch data for {symbol} - API returned None"}
+            
+            df_daily = data_frames.get("DAILY")
+            print(f"DEBUG: df_daily type: {type(df_daily)}, is None: {df_daily is None}, is empty: {df_daily.empty if df_daily is not None else 'N/A'}")
+            
+            if df_daily is None or df_daily.empty:
+                return {"error": f"Could not fetch daily data for {symbol}"}
+        except Exception as e:
+            print(f"DEBUG: Exception in data fetch: {e}")
+            import traceback
+            print(f"DEBUG: Traceback: {traceback.format_exc()}")
+            return {"error": f"Exception fetching data for {symbol}: {str(e)}"}
         
         # Meta Data
         last_date = df_daily.iloc[-1]['date']
@@ -55,13 +68,21 @@ class TradingPipeline:
         }
 
         # --- PHASE 0: Calendar-First Scan ---
-        # Checks seasonal zones, earnings, month patterns
-        results['phase_0_calendar'] = self.calendar_engine.phase_0_scan(symbol)
+        # Now using live data from APIs
+        try:
+            print(f"DEBUG: Running calendar engine phase_0_scan...")
+            results['phase_0_calendar'] = self.calendar_engine.phase_0_scan(symbol)
+            print(f"DEBUG: Calendar scan completed")
+        except Exception as e:
+            print(f"DEBUG: Calendar scan failed: {e}")
+            results['phase_0_calendar'] = {"status": "ERROR", "error": str(e)}
         
         # --- PHASE 1: Stock-Specific Historical Behavior ---
         # Simple Logic: Check returns for current month in historical data (5y)
+        print(f"DEBUG: Starting Phase 1...")
         current_month = datetime.now().month
         df_monthly = data_frames.get("MONTHLY")
+        print(f"DEBUG: df_monthly type: {type(df_monthly)}, is None: {df_monthly is None}")
         phase_1_status = "NEUTRAL"
         avg_return = 0.0
         if df_monthly is not None and len(df_monthly) > 12:
@@ -69,6 +90,7 @@ class TradingPipeline:
             avg_return = monthly_returns.mean()
             if avg_return > 0.02: phase_1_status = "BULLISH_SEASONALITY"
             elif avg_return < -0.02: phase_1_status = "BEARISH_SEASONALITY"
+        print(f"DEBUG: Phase 1 completed")
             
         results['phase_1_history'] = {
             "status": phase_1_status,
@@ -78,12 +100,27 @@ class TradingPipeline:
         # --- PHASE 2: Market Index Confirmation ---
         # Checks SPY, QQQ, DIA alignment
         # Scanner engine returns phase 2 and 3 info combined, we split strictly here
-        scanner_res = self.scanner_engine.phase_2_3_scan(symbol)
-        results['phase_2_market'] = scanner_res.get('phase_2', {})
-        
-        # --- PHASE 3: Independent Stock Check ---
-        # Checks if stock is an "Independent Mover" (e.g. NVDA, TSLA)
-        results['phase_3_independent'] = scanner_res.get('phase_3', {})
+        print(f"DEBUG: Starting Phase 2 - Market Index Confirmation")
+        try:
+            scanner_res = self.scanner_engine.phase_2_3_scan(symbol)
+            print(f"DEBUG: scanner_res type: {type(scanner_res)}, value: {scanner_res}")
+            
+            if scanner_res is None:
+                print(f"DEBUG: scanner_res is None, using defaults")
+                scanner_res = {'phase_2': {}, 'phase_3': {}}
+                
+            results['phase_2_market'] = scanner_res.get('phase_2', {})
+            
+            # --- PHASE 3: Independent Stock Check ---
+            # Checks if stock is an "Independent Mover" (e.g. NVDA, TSLA)
+            results['phase_3_independent'] = scanner_res.get('phase_3', {})
+            print(f"DEBUG: Phase 2 & 3 completed")
+        except Exception as phase2_error:
+            print(f"DEBUG: Phase 2/3 error: {phase2_error}")
+            import traceback
+            print(f"DEBUG: Phase 2/3 traceback: {traceback.format_exc()}")
+            results['phase_2_market'] = {"error": str(phase2_error)}
+            results['phase_3_independent'] = {"error": str(phase2_error)}
         
         # --- PHASE 4: Higher-Timeframe Trend Assessment ---
         # Analyze Weekly/Monthly trends to align with lower timeframes
@@ -149,6 +186,11 @@ class TradingPipeline:
                     inds = indicators
                 else:
                     inds = self.indicator_engine.calculate_all_indicators(df)
+                
+                # Check if indicators calculation succeeded
+                if inds is None:
+                    print(f"DEBUG: calculate_all_indicators returned None for {tf_name}")
+                    inds = {'trend': 'NEUTRAL', 'error': 'Indicator calculation failed'}
                     
                 results['timeframes'][tf_name] = {
                     "indicators": inds,
@@ -194,9 +236,15 @@ class TradingPipeline:
                 # Calculate indicators for report context
                 # Note: re-calculating daily here is slightly redundant but safe
                 inds = self.indicator_engine.calculate_all_indicators(df)
+                
+                # Check if indicators calculation succeeded
+                if inds is None:
+                    print(f"DEBUG: calculate_all_indicators returned None for {tf_name} (duplicate section)")
+                    inds = {'trend': 'NEUTRAL', 'error': 'Indicator calculation failed'}
+                    
                 results['timeframes'][tf_name] = {
                     "indicators": inds,
-                    "trend": inds.get('trend', 'Neutral')
+                    "trend": inds.get('trend', 'NEUTRAL')
                 }
         final_output = self.output_api.generate_json_output(results)
         
