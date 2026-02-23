@@ -1,3 +1,5 @@
+version: '3.8'
+
 services:
   stock-gita-agent:
     build: .
@@ -7,13 +9,12 @@ services:
       - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
       - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
       - AWS_DEFAULT_REGION=us-east-1
-      - API_SOURCE=${API_SOURCE:-twelve}
+      - TWELVE_DATA_API_KEY=${TWELVE_DATA_API_KEY} # Optional since we hardcoded rotating keys, but good practice
     volumes:
-      - ./stock_gita_engine_charts:/app/stock_gita_engine_charts
-      - ./credentials.json:/app/credentials.json
+      - ./stock_gita_engine_charts:/app/stock_gita_engine_charts # For live reloading if needed
 
   open-webui:
-    image: ghcr.io/open-webui/open-webui:latest
+    image: ghcr.io/open-webui/open-webui:v0.8.5
     ports:
       - "7778:8080"
     environment:

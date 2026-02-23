@@ -97,6 +97,3 @@ dmypy.json
 # Project specific
 *.pyc
 __pycache__/
-
-
-frontend/

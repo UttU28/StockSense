@@ -1,128 +1,83 @@
 #!/bin/bash
-# Unified Deployment Script for Stock Gita
-# Smart deployment - checks what's installed and skips unnecessary steps
+# Master Deployment Script for Stock Gita
+# Runs locally to deploy to EC2
 
 set -e
 
+# Configuration
+EC2_IP="18.215.117.40"
+EC2_USER="ubuntu"
+SSH_KEY="$HOME/Downloads/stock-gita-key.pem"
 DOMAIN="rakeshent.info"
-EMAIL="admin@rakeshent.info"
-# Use directory where this script lives (stock_gita_deploy)
-APP_DIR="$(cd "$(dirname "$0")" && pwd)"
+PROJECT_DIR="/Users/vits/Desktop/trading/stock_gita_deploy"
 
 echo "========================================"
-echo "Stock Gita - Smart Deployment"
+echo "Stock Gita Deployment to EC2"
 echo "Domain: $DOMAIN"
+echo "IP: $EC2_IP"
 echo "========================================"
 
-cd "$APP_DIR"
-
-# Quick check: Server Setup (only if needed)
-if ! command -v docker &> /dev/null; then
-    echo "[Setup] Installing Docker and dependencies..."
-    bash server_setup.sh
-else
-    echo "✅ Docker already installed (skipping setup)"
-fi
-
-# Stop existing containers
-echo ""
-echo "[1/4] Stopping existing containers..."
-docker compose down || true
-
-# Configure Nginx (only if config changed or missing)
-echo ""
-echo "[2/4] Configuring Nginx..."
-
-# Check if SSL certificate exists to determine which config to use
-SSL_EXISTS=false
-if [ -d "/etc/letsencrypt/live/$DOMAIN" ]; then
-    SSL_EXISTS=true
-fi
-
-# Use HTTP-only config if SSL doesn't exist, otherwise use SSL config
-if [ "$SSL_EXISTS" = false ]; then
-    if [ ! -f "nginx_rakeshent_http.conf" ]; then
-        echo "❌ nginx_rakeshent_http.conf not found!"
-        exit 1
-    fi
-    NGINX_CONFIG_FILE="nginx_rakeshent_http.conf"
-    echo "Using HTTP-only configuration (SSL will be added by certbot)..."
-else
-    if [ ! -f "nginx_rakeshent.conf" ]; then
-        echo "❌ nginx_rakeshent.conf not found!"
-        exit 1
-    fi
-    NGINX_CONFIG_FILE="nginx_rakeshent.conf"
-    echo "Using SSL configuration..."
-fi
-
-NGINX_CONFIG_EXISTS=false
-if [ -f "/etc/nginx/sites-available/$DOMAIN" ]; then
-    if ! sudo diff -q "$NGINX_CONFIG_FILE" /etc/nginx/sites-available/$DOMAIN > /dev/null 2>&1; then
-        echo "Updating Nginx configuration..."
-        sudo cp "$NGINX_CONFIG_FILE" /etc/nginx/sites-available/$DOMAIN
-        NGINX_NEEDS_RELOAD=true
-    else
-        echo "✅ Nginx config unchanged (skipping copy)"
-        NGINX_CONFIG_EXISTS=true
-    fi
-else
-    echo "Creating Nginx configuration..."
-    sudo cp "$NGINX_CONFIG_FILE" /etc/nginx/sites-available/$DOMAIN
-    NGINX_NEEDS_RELOAD=true
-fi
-
-# Enable site if not already enabled
-if [ ! -L "/etc/nginx/sites-enabled/$DOMAIN" ]; then
-    sudo ln -sf /etc/nginx/sites-available/$DOMAIN /etc/nginx/sites-enabled/
-    NGINX_NEEDS_RELOAD=true
-fi
-
-# Remove old configs if they exist
-sudo rm -f /etc/nginx/sites-enabled/stocks.thatinsaneguy.com
-sudo rm -f /etc/nginx/sites-enabled/default
-
-# Test Nginx configuration
-if sudo nginx -t > /dev/null 2>&1; then
-    echo "✅ Nginx configuration valid"
-else
-    echo "❌ Nginx configuration error!"
-    sudo nginx -t
+# Check SSH key exists
+if [ ! -f "$SSH_KEY" ]; then
+    echo "❌ SSH key not found at: $SSH_KEY"
+    echo ""
+    echo "Please ensure the SSH key 'stock-gita-key.pem' is in ~/Downloads/"
+    echo "You can download it from the AWS EC2 console if needed."
     exit 1
 fi
 
-# Reload Nginx if config was updated (before SSL setup)
-if [ "$NGINX_NEEDS_RELOAD" = true ]; then
-    echo "Reloading Nginx..."
-    sudo systemctl reload nginx
-    echo "✅ Nginx reloaded"
-fi
+# Set correct permissions on SSH key
+chmod 400 "$SSH_KEY"
 
-# SSL Certificate (only if missing)
+# Test SSH connection
 echo ""
-echo "[3/4] Checking SSL certificate..."
-if [ ! -d "/etc/letsencrypt/live/$DOMAIN" ]; then
-    echo "Obtaining SSL certificate from Let's Encrypt..."
-    # Certbot will automatically modify the nginx config to add SSL and reload nginx
-    sudo certbot --nginx -d $DOMAIN --non-interactive --agree-tos --email $EMAIL
-    echo "✅ SSL certificate obtained and configured (nginx reloaded by certbot)"
+echo "[Step 1/6] Testing SSH connection..."
+if ssh -i "$SSH_KEY" -o StrictHostKeyChecking=no "$EC2_USER@$EC2_IP" "echo 'SSH connection successful'"; then
+    echo "✅ SSH connection working"
 else
-    echo "✅ SSL certificate already exists (skipping)"
+    echo "❌ SSH connection failed"
+    echo "Please check:"
+    echo "  - Instance is running"
+    echo "  - Security group allows SSH from your IP"
+    echo "  - SSH key is correct"
+    exit 1
 fi
 
-# Start Docker containers
+# Package the project
 echo ""
-echo "[4/4] Starting Docker containers..."
-docker compose up -d --build
+echo "[Step 2/6] Packaging project..."
+cd "$PROJECT_DIR/.."
+tar -czf stock_gita_deploy.tar.gz \
+    --exclude='stock_gita_deploy/stock_gita_engine_charts/__pycache__' \
+    --exclude='stock_gita_deploy/stock_gita_engine_charts/*/__pycache__' \
+    --exclude='stock_gita_deploy/stock_gita_engine_charts/*/*/__pycache__' \
+    --exclude='stock_gita_deploy/stock_gita_engine_charts/data/stock_gita.db' \
+    stock_gita_deploy/
 
-echo ""
-echo "⏳ Waiting for services to start..."
-sleep 10
+echo "✅ Project packaged ($(du -h stock_gita_deploy.tar.gz | cut -f1))"
 
-# Quick status check
+# Transfer to server
 echo ""
-echo "📊 Service Status:"
-docker compose ps
+echo "[Step 3/6] Transferring files to server..."
+scp -i "$SSH_KEY" stock_gita_deploy.tar.gz "$EC2_USER@$EC2_IP:~/"
+echo "✅ Files transferred"
+
+# Extract on server
+echo ""
+echo "[Step 4/6] Extracting files on server..."
+ssh -i "$SSH_KEY" "$EC2_USER@$EC2_IP" "tar -xzf stock_gita_deploy.tar.gz && rm stock_gita_deploy.tar.gz"
+echo "✅ Files extracted"
+
+# Run server setup
+echo ""
+echo "[Step 5/6] Running server setup (Docker, Nginx, etc)..."
+ssh -i "$SSH_KEY" "$EC2_USER@$EC2_IP" "bash stock_gita_deploy/server_setup.sh"
+echo "✅ Server configured"
+
+# Deploy application
+echo ""
+echo "[Step 6/6] Deploying application..."
+ssh -i "$SSH_KEY" "$EC2_USER@$EC2_IP" "bash stock_gita_deploy/deploy_app.sh"
 
 echo ""
 echo "========================================"
@@ -138,8 +93,7 @@ echo "- Stock Gita Agent: Internal port 7777"
 echo "- Chart Endpoint: https://$DOMAIN/chart?symbol=AAPL"
 echo ""
 echo "Useful Commands:"
-echo "- View logs: docker compose logs -f"
-echo "- Restart: docker compose restart"
-echo "- Stop: docker compose down"
-echo "- Check status: docker compose ps"
+echo "- View logs: ssh -i $SSH_KEY $EC2_USER@$EC2_IP 'cd stock_gita_deploy && docker-compose logs -f'"
+echo "- Restart: ssh -i $SSH_KEY $EC2_USER@$EC2_IP 'cd stock_gita_deploy && docker-compose restart'"
+echo "- Stop: ssh -i $SSH_KEY $EC2_USER@$EC2_IP 'cd stock_gita_deploy && docker-compose down'"
 echo ""

@@ -188,8 +188,8 @@ def analyze_stock_func(symbol: str) -> str:
         print(f"DEBUG: Formatted output length: {len(formatted_output)}")
 
         # Append Static Chart Image (Bypassing Sandbox) with Link to Interactive
-        img_url = f"http://18.215.117.40/chart_img?symbol={symbol.upper()}"
-        interactive_url = f"http://18.215.117.40/chart_v2?symbol={symbol.upper()}"
+        img_url = f"http://54.235.215.162/chart_img?symbol={symbol.upper()}"
+        interactive_url = f"http://54.235.215.162/chart_v2?symbol={symbol.upper()}"
         
         iframe_code = f"""
 ---

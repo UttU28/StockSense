@@ -11,18 +11,10 @@ try:
 except ImportError:
     YFINANCE_AVAILABLE = False
 
-# Twelve Data key cycling (credentials.json)
-try:
-    from .credentials_manager import get_credentials_manager
-    _CREDENTIALS_AVAILABLE = True
-except ImportError:
-    _CREDENTIALS_AVAILABLE = False
-
 
 class MassiveAPI:
     """
     Wrapper for Massive API - provides OHLC data and technical indicators.
-    Twelve Data API is used for earnings; keys are cycled via credentials.json when present.
     """
     
     BASE_URL = "https://api.massive.com"
@@ -30,15 +22,7 @@ class MassiveAPI:
     def __init__(self, api_key: str = None):
         from config import MASSIVE_API_KEY, TWELVE_DATA_API_KEY
         self.api_key = api_key or MASSIVE_API_KEY
-        # Twelve Data: use credentials.json rotation if available, else single key from env
-        self._twelve_use_rotation = False
-        self.twelve_data_api_key = None
-        if _CREDENTIALS_AVAILABLE:
-            self._credentials_manager = get_credentials_manager()
-            if self._credentials_manager.get_key_count() > 0:
-                self._twelve_use_rotation = True
-        if not self._twelve_use_rotation:
-            self.twelve_data_api_key = TWELVE_DATA_API_KEY
+        self.twelve_data_api_key = TWELVE_DATA_API_KEY
     
     def _request(self, endpoint: str, params: dict = None) -> Optional[dict]:
         """Make API request with error handling."""
@@ -56,45 +40,30 @@ class MassiveAPI:
             print(f"Massive API exception: {e}")
             return None
 
-    def _get_twelve_data_key(self) -> Optional[str]:
-        """Get Twelve Data API key: from rotation (credentials.json) or single key."""
-        if self._twelve_use_rotation:
-            return self._credentials_manager.get_next_key()
-        return self.twelve_data_api_key
-
     def _fetch_twelvedata_earnings(self, symbol: str) -> Optional[dict]:
         """
         Fetches earnings data from TwelveData API as fallback.
-        Uses credentials.json key rotation when available; marks key exhausted on rate limit.
+
+        Args:
+            symbol: Stock ticker symbol
+
+        Returns:
+            Raw API response dict or None if request fails
         """
-        api_key = self._get_twelve_data_key()
-        if not api_key:
-            print("[Twelve Data] No API key available (add keys to credentials.json or set TWELVE_DATA_API_KEY)")
-            return None
         try:
             url = "https://api.twelvedata.com/earnings"
-            params = {"symbol": symbol, "apikey": api_key}
+            params = {
+                "symbol": symbol,
+                "apikey": self.twelve_data_api_key
+            }
             resp = requests.get(url, params=params, timeout=30)
 
             if resp.status_code == 200:
-                data = resp.json()
-                # Check for rate limit in JSON body
-                if isinstance(data, dict) and data.get("status") == "error":
-                    msg = (data.get("message") or "").lower()
-                    if any(p in msg for p in ["rate limit", "rate_limit", "too many requests", "quota exceeded", "429"]):
-                        if self._twelve_use_rotation:
-                            self._credentials_manager.mark_key_exhausted(api_key)
-                        print(f"[Twelve Data] Rate limit for key ...{api_key[-4:]}")
-                        return None
-                return data
+                return resp.json()
 
-            if resp.status_code == 429:
-                if self._twelve_use_rotation:
-                    self._credentials_manager.mark_key_exhausted(api_key)
-                print(f"[Twelve Data] Rate limit (429) for key ...{api_key[-4:]}")
-                return None
             print(f"TwelveData API error: {resp.status_code} - {resp.text}")
             return None
+
         except Exception as e:
             print(f"TwelveData API exception: {e}")
             return None

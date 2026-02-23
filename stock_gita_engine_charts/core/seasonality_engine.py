@@ -248,9 +248,9 @@ class SeasonalityAnalyzer:
         closes = month_df['close'].tolist()
         
         # --- Phases ---
-        early_idx = slice(0, 5) # Days 1-5
-        mid_idx = slice(5, 15)  # Days 6-15
-        end_idx = slice(15, None) # Days 16-End (rest)
+        early_idx = slice(0, 10) # Days 1-10
+        mid_idx = slice(10, 20)  # Days 11-20
+        end_idx = slice(20, None) # Days 21-End
         
         phases = {
             "Early": self._calc_phase(month_df, early_idx),
@@ -373,7 +373,7 @@ class SeasonalityAnalyzer:
                        "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
                        
         md = f"#### {year}\n"
-        md += "| Month | Early (1-5) | Mid (6-15) | End (16+) | Base TF | Top Bull Opp | Top Bear Opp |\n"
+        md += "| Month | EARLY (1-10) | MID (11-20) | END (20+) | BASE TF | TOP BULL OPP | TOP BEAR OPP |\n"
         md += "|---|---|---|---|---|---|---|\n"
         
         for m_data in data:
@@ -396,7 +396,7 @@ class SeasonalityAnalyzer:
     def _format_table_c(self, all_data):
         # Combined Summary
         md = "### Combined Summary (2021-2025)\n"
-        md += "| Month | Typical Early | Typical Mid | Typical End | Common Base TF | Common Opp Type |\n"
+        md += "| Month | TYPICAL EARLY (1-10) | TYPICAL MID (11-20) | TYPICAL END (20+) | COMMON BASE TF | COMMON OPP TYPE |\n"
         md += "|---|---|---|---|---|---|\n"
         
         from collections import Counter
