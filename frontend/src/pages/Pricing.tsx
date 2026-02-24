@@ -2,8 +2,9 @@ import { useState } from "react";
 import { motion } from "framer-motion";
 import { Link, useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
-import { Check, Coins } from "lucide-react";
+import { Check, Coins, ArrowLeft } from "lucide-react";
 import { AppNavbar } from "@/components/AppNavbar";
+import { StockTicker } from "@/components/StockTicker";
 import { useAuth } from "@/contexts/AuthContext";
 import { createCheckoutSession } from "@/lib/credits-api";
 import { toast } from "@/hooks/use-toast";
@@ -64,14 +65,14 @@ export default function Pricing() {
     <div className="min-h-screen flex flex-col w-full">
       <AppNavbar />
 
-      <div className="flex-1 p-6 md:p-12 lg:p-16 max-w-6xl mx-auto flex flex-col w-full">
+      <div className="flex-1 p-6 md:p-12 lg:p-16 pb-24 max-w-6xl mx-auto flex flex-col w-full">
         <motion.section
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.4 }}
           className="text-center mb-12 md:mb-16"
         >
-          <h1 className="text-3xl md:text-5xl font-bold font-display bg-gradient-to-br from-white to-white/70 bg-clip-text text-transparent tracking-tight mb-3">
+          <h1 className="text-3xl md:text-5xl font-bold font-display text-foreground tracking-tight mb-3">
             Pricing
           </h1>
           <p className="text-muted-foreground text-lg max-w-xl mx-auto">
@@ -155,11 +156,13 @@ export default function Pricing() {
           transition={{ delay: 0.3 }}
           className="mt-auto pt-8 pb-4 text-center border-t border-border/50"
         >
-          <Link href="/" className="inline-block mt-4 text-sm text-primary hover:underline">
-            ← Back to home
+          <Link href="/" className="inline-flex items-center justify-center gap-1.5 mt-4 text-sm text-primary hover:underline">
+            <ArrowLeft className="w-3.5 h-3.5" />
+            <span>Back to home</span>
           </Link>
         </motion.footer>
       </div>
+      <StockTicker />
     </div>
   );
 }

@@ -54,7 +54,7 @@ const SpeechRecognitionAPI =
     : undefined;
 
 const INITIAL_ASSISTANT_MESSAGE =
-  "Hello! I'm **Stock Gita AI**. You can ask me to:\n\n- **Analyze AAPL** – full report with trend and levels\n- **Scan market** – find opportunities\n- **Seasonality for NVDA** – seasonal report\n- **Risk 10000 on GOOGL** – position sizing";
+  "Hello! I'm **Stock Sense AI**. You can ask me to:\n\n- **Analyze AAPL** – full report with trend and levels\n- **Scan market** – find opportunities\n- **Seasonality for NVDA** – seasonal report\n- **Risk 10000 on GOOGL** – position sizing";
 
 function rewriteChartUrls(content: string): string {
   return content

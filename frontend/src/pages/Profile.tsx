@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card } from "@/components/ui/card";
-import { Eye, EyeOff, User, Coins, Receipt, BarChart3 } from "lucide-react";
+import { Eye, EyeOff, User, Coins, Receipt, BarChart3, ArrowLeft, Plus } from "lucide-react";
 import {
   BarChart,
   Bar,
@@ -153,7 +153,10 @@ export default function Profile() {
               {credits !== null ? credits.toLocaleString() : "—"} <span className="text-sm font-normal text-muted-foreground">available</span>
             </p>
             <Link href="/pricing">
-              <Button size="sm">Buy more credits</Button>
+              <Button size="sm" className="gap-2">
+                <Plus className="w-4 h-4" />
+                <span>Buy more credits</span>
+              </Button>
             </Link>
           </Card>
 
@@ -300,7 +303,10 @@ export default function Profile() {
 
           <div className="pt-4">
             <Link href="/">
-              <Button variant="outline" className="border-border">Back to Home</Button>
+              <Button variant="outline" className="border-border gap-2">
+                <ArrowLeft className="w-4 h-4" />
+                <span>Back to Home</span>
+              </Button>
             </Link>
           </div>
         </motion.div>

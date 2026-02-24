@@ -1,15 +1,10 @@
-import { useState, useEffect, useMemo } from "react";
 import { motion } from "framer-motion";
-import { BarChart3, ScanSearch, Calendar, ArrowRight } from "lucide-react";
+import { BarChart3, ScanSearch, Calendar, ArrowRight, DollarSign, User as UserIcon } from "lucide-react";
 import { Link } from "wouter";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/contexts/AuthContext";
 import { AppNavbar } from "@/components/AppNavbar";
-
-const TICKER_SYMBOLS = ["AAPL", "MSFT", "GOOGL", "NVDA", "AMZN", "META", "TSLA", "JPM", "V", "JNJ"];
-const TICKER_BATCH_URL = `/api/ticker/batch/${TICKER_SYMBOLS.join(",")}`;
-
-type TickerItem = { symbol: string; price: string; up: boolean };
+import { StockTicker } from "@/components/StockTicker";
 
 const features = [
   {
@@ -30,51 +25,13 @@ const features = [
 ];
 
 export default function Home() {
-  const [tickerItems, setTickerItems] = useState<TickerItem[] | null>(null);
   const { user } = useAuth();
-
-  useEffect(() => {
-    let cancelled = false;
-    const fetchTickers = async () => {
-      try {
-        const res = await fetch(TICKER_BATCH_URL);
-        if (!res.ok) return;
-        const json = await res.json();
-        const data = json?.data ?? {};
-        if (cancelled) return;
-        const list: TickerItem[] = TICKER_SYMBOLS.map((symbol) => {
-          const t = data[symbol];
-          const price = t?.currentPrice ?? 0;
-          const change = t?.change ?? 0;
-          return {
-            symbol,
-            price: price > 0 ? price.toFixed(2) : "—",
-            up: change >= 0,
-          };
-        });
-        setTickerItems(list);
-      } catch {
-        if (!cancelled) setTickerItems(null);
-      }
-    };
-    fetchTickers();
-    const interval = setInterval(fetchTickers, 120_000);
-    return () => {
-      cancelled = true;
-      clearInterval(interval);
-    };
-  }, []);
-
-  const marqueeItems = useMemo(() => {
-    if (tickerItems && tickerItems.length > 0) return [...tickerItems, ...tickerItems];
-    return [...TICKER_SYMBOLS.map((s) => ({ symbol: s, price: "—", up: true })), ...TICKER_SYMBOLS.map((s) => ({ symbol: s, price: "—", up: true }))];
-  }, [tickerItems]);
 
   return (
     <div className="min-h-screen flex flex-col">
       <AppNavbar />
 
-      <div className="flex-1 p-6 md:p-12 lg:p-16 max-w-6xl mx-auto flex flex-col w-full">
+      <div className="flex-1 p-6 md:p-12 lg:p-16 pb-24 max-w-6xl mx-auto flex flex-col w-full">
         {/* Hero */}
         <motion.section
           initial={{ opacity: 0, y: 20 }}
@@ -82,11 +39,11 @@ export default function Home() {
           transition={{ duration: 0.5 }}
           className="flex flex-col items-center text-center pt-12 md:pt-20 pb-16"
         >
-          <h1 className="text-4xl md:text-6xl lg:text-7xl font-bold font-display bg-gradient-to-br from-white to-white/70 bg-clip-text text-transparent tracking-tight mb-4">
-            Stock Gita
+          <h1 className="text-4xl md:text-6xl lg:text-7xl font-bold font-display text-foreground tracking-tight mb-4">
+            Stock Sense
           </h1>
           <p className="text-muted-foreground text-lg md:text-xl max-w-xl mb-10">
-            Chat with Stock Gita for reports, signals, and seasonality. Analyze symbols, scan the market, and size risk—all in one place.
+            Chat with Stock Sense for reports, signals, and seasonality. Analyze symbols, scan the market, and size risk—all in one place.
           </p>
           <div className="flex flex-wrap items-center justify-center gap-3">
             {user && (
@@ -98,14 +55,16 @@ export default function Home() {
               </Link>
             )}
             <Link href="/pricing">
-              <Button size="lg" variant="outline" className="h-12 px-8 text-base border-border">
-                Pricing
+              <Button size="lg" variant="outline" className="h-12 px-8 text-base border-border gap-2">
+                <DollarSign className="w-4 h-4 text-muted-foreground" />
+                <span>Pricing</span>
               </Button>
             </Link>
             {!user && (
               <Link href="/auth">
-                <Button size="lg" variant="outline" className="h-12 px-8 text-base border-border">
-                  Log in / Sign up
+                <Button size="lg" variant="outline" className="h-12 px-8 text-base border-border gap-2">
+                  <UserIcon className="w-4 h-4 text-muted-foreground" />
+                  <span>Log in / Sign up</span>
                 </Button>
               </Link>
             )}
@@ -151,7 +110,7 @@ export default function Home() {
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           transition={{ delay: 0.6, duration: 0.4 }}
-          className="mt-auto pt-8 text-center"
+          className="mt-auto pt-0 text-center"
         >
           <p className="text-muted-foreground text-sm mb-6">
             Try: “Analyze AAPL”, “Scan market”, “Seasonality for NVDA”, “Risk 10000 on GOOGL”
@@ -159,22 +118,7 @@ export default function Home() {
         </motion.section>
       </div>
 
-      {/* Stock ticker marquee – full width */}
-      <div className="w-full border-t border-border/50 bg-card/40 backdrop-blur-sm overflow-hidden py-3">
-        <div className="flex w-max marquee-track">
-          {marqueeItems.map((item, i) => (
-            <div
-              key={`${item.symbol}-${i}`}
-              className="flex items-center gap-4 shrink-0 px-6 border-r border-border/30 last:border-r-0"
-            >
-              <span className="font-display font-semibold text-foreground">{item.symbol}</span>
-              <span className={item.up ? "text-emerald-500/90" : "text-red-400/90"}>
-                ${item.price}
-              </span>
-            </div>
-          ))}
-        </div>
-      </div>
+      <StockTicker />
     </div>
   );
 }

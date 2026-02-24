@@ -8,7 +8,7 @@ react-hook-form | Form state management
 - Using standard dialog/modal pattern for creation
 - Framer motion used for list entry animations
 
-## Running with Stock Gita backend
+## Running with Stock Sense backend
 
 **Two steps:**
 

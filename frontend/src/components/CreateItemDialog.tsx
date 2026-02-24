@@ -53,7 +53,10 @@ export function CreateItemDialog() {
           Add New Item
         </Button>
       </DialogTrigger>
-      <DialogContent className="sm:max-w-[425px] bg-card border-white/10 text-card-foreground p-6 rounded-2xl shadow-2xl backdrop-blur-2xl">
+      <DialogContent
+        className="sm:max-w-[425px] bg-card border-white/10 text-card-foreground p-6 rounded-2xl shadow-2xl backdrop-blur-2xl"
+        aria-describedby={undefined}
+      >
         <DialogHeader>
           <DialogTitle className="text-2xl font-bold font-display">Create Item</DialogTitle>
         </DialogHeader>

@@ -414,7 +414,7 @@ async def create_checkout_session(request: Request, body: CreateCheckoutBody):
                     "currency": "usd",
                     "unit_amount": body.priceCents,
                     "product_data": {
-                        "name": f"Stock Gita — {credits:,} credits",
+                        "name": f"Stock Sense — {credits:,} credits",
                         "description": "One-time credit recharge",
                     },
                 },

@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card } from "@/components/ui/card";
-import { Eye, EyeOff } from "lucide-react";
+import { Eye, EyeOff, Chrome } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "@/hooks/use-toast";
 import { AppNavbar } from "@/components/AppNavbar";
@@ -81,9 +81,9 @@ export default function Auth() {
             className="w-full max-w-md relative"
           >
           <Card className="p-8 glass-card border-border/50 shadow-xl shadow-primary/5">
-            {/* Stock Gita title at top of card */}
-            <h2 className="font-display font-bold text-2xl sm:text-3xl text-center text-foreground tracking-tight bg-gradient-to-br from-white to-white/80 bg-clip-text text-transparent mb-6">
-              Stock Gita
+            {/* Stock Sense title at top of card */}
+            <h2 className="font-display font-bold text-2xl sm:text-3xl text-center text-foreground tracking-tight mb-6">
+              Stock Sense
             </h2>
             {/* Title for selected service */}
             <div className="text-center mb-6">
@@ -249,11 +249,12 @@ export default function Auth() {
             <Button
               type="button"
               variant="outline"
-              className="w-full border-border hover:bg-muted/50"
+              className="w-full border-border hover:bg-muted/50 flex items-center justify-center gap-2"
               onClick={handleGoogle}
               disabled={loading}
             >
-              Google
+              <Chrome className="w-4 h-4" />
+              <span>Google</span>
             </Button>
 
             <p className="mt-6 text-center text-sm text-muted-foreground font-sans">
