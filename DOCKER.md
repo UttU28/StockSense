@@ -8,6 +8,18 @@ Single deploy script for Ubuntu: destroys existing containers, rebuilds, obtains
 - Domain **stocksense.thatinsaneguy.com** pointing to your server's IP (A record)
 - Ports **80** and **443** open on the server
 
+## Install Docker (if not installed)
+
+`deploy.sh` **auto-installs Docker** when missing. Or install manually:
+
+```bash
+chmod +x install-docker.sh
+./install-docker.sh
+# Then run: newgrp docker   (or log out and back in)
+```
+
+*Note: Node, npm, nginx run inside Docker containers—no host install needed.*
+
 ## Quick Start
 
 ```bash
