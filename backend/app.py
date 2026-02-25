@@ -179,9 +179,13 @@ async def ticker_batch(symbols: str):
     return JSONResponse(content={"data": results})
 
 
+# New user signup bonus (credits)
+NEW_USER_CREDITS = int(os.getenv("NEW_USER_CREDITS", "50000"))
+
+
 @app.post("/auth/register")
 async def auth_register(body: RegisterBody):
-    """Verify Firebase ID token and upsert user in Firestore (name, email, uid)."""
+    """Verify Firebase ID token and upsert user in Firestore (name, email, uid). New users get 50K credits."""
     try:
         app_fb, db = _get_firebase()
         if app_fb is None or db is None:
@@ -194,12 +198,17 @@ async def auth_register(body: RegisterBody):
         if not uid:
             raise HTTPException(status_code=401, detail="Invalid token")
         users_ref = db.collection("users").document(uid)
-        users_ref.set({
+        doc = users_ref.get()
+        is_new = not doc.exists
+        data: dict = {
             "uid": uid,
             "email": email,
             "displayName": display_name,
             "updatedAt": _fstore.SERVER_TIMESTAMP,
-        }, merge=True)
+        }
+        if is_new:
+            data["credits"] = NEW_USER_CREDITS
+        users_ref.set(data, merge=True)
         return JSONResponse(content={"ok": True, "uid": uid})
     except HTTPException:
         raise
@@ -419,7 +428,8 @@ def _deduct_usage(db, uid: str, chat_id: str, tokens_used: int):
     user_ref = db.collection("users").document(uid)
     doc = user_ref.get()
     current = int(doc.to_dict().get("credits", 0)) if doc.exists else 0
-    user_ref.set({"credits": current - credits_used, "updatedAt": _fstore.SERVER_TIMESTAMP}, merge=True)
+    new_credits = max(0, current - credits_used)
+    user_ref.set({"credits": new_credits, "updatedAt": _fstore.SERVER_TIMESTAMP}, merge=True)
     usage_ref = db.collection("usage_log").document()
     usage_ref.set({
         "userId": uid,
@@ -429,7 +439,7 @@ def _deduct_usage(db, uid: str, chat_id: str, tokens_used: int):
         "createdAt": _fstore.SERVER_TIMESTAMP,
     })
     log.info("Usage recorded: uid=%s chatId=%s credits=%s", uid, chat_id, credits_used)
-    print(f"  [Credits] Chat {chat_id}: {credits_used} credits used (tokens: {tokens_used}) → {current - credits_used} remaining")
+    print(f"  [Credits] Chat {chat_id}: {credits_used} credits used (tokens: {tokens_used}) → {new_credits} remaining")
 
 
 def _get_user_credits(db, uid: str) -> int:
@@ -605,7 +615,13 @@ async def record_usage(request: Request, body: RecordUsageBody):
     user_ref = db.collection("users").document(uid)
     doc = user_ref.get()
     current = int(doc.to_dict().get("credits", 0)) if doc.exists else 0
-    user_ref.set({"credits": current - credits_used, "updatedAt": _fstore.SERVER_TIMESTAMP}, merge=True)
+    if current < credits_used:
+        return JSONResponse(
+            content={"detail": "Insufficient credits", "credits": current, "required": credits_used},
+            status_code=402,
+        )
+    new_credits = current - credits_used
+    user_ref.set({"credits": new_credits, "updatedAt": _fstore.SERVER_TIMESTAMP}, merge=True)
     usage_ref = db.collection("usage_log").document()
     usage_ref.set({
         "userId": uid,
@@ -616,8 +632,8 @@ async def record_usage(request: Request, body: RecordUsageBody):
     })
     chat_ref.update({"updatedAt": _fstore.SERVER_TIMESTAMP})
     log.info("Usage recorded: uid=%s chatId=%s credits=%s", uid, body.chatId, credits_used)
-    print(f"  [Credits] Chat {body.chatId}: {credits_used} credits used (tokens: {tokens_used}) → {current - credits_used} remaining")
-    return {"ok": True, "creditsUsed": credits_used, "creditsRemaining": current - credits_used}
+    print(f"  [Credits] Chat {body.chatId}: {credits_used} credits used (tokens: {tokens_used}) → {new_credits} remaining")
+    return {"ok": True, "creditsUsed": credits_used, "creditsRemaining": new_credits}
 
 
 @app.get("/api/me/usage")
@@ -664,6 +680,59 @@ async def get_my_usage(request: Request, period: str = "30d"):
         d = (datetime.now(timezone.utc) - timedelta(days=i)).date()
         dates.append({"date": d.isoformat(), "creditsUsed": by_day.get(d.isoformat(), 0)})
     return {"usage": dates, "period": period}
+
+
+# Minimum credits required to make a chat request (typical response ~500+ tokens)
+MIN_CREDITS_TO_CHAT = int(os.getenv("MIN_CREDITS_TO_CHAT", "100"))
+
+
+@app.post("/v1/chat/completions")
+async def chat_completions_proxy(request: Request):
+    """Proxy chat completions to rakeshent, but block if user has insufficient credits."""
+    try:
+        uid = await get_uid_from_token(request)
+    except HTTPException:
+        return JSONResponse(
+            content={"detail": "Authentication required"},
+            status_code=401,
+        )
+    _, db = _get_firebase()
+    if db is None:
+        return JSONResponse(content={"detail": "Database not configured"}, status_code=503)
+    credits = _get_user_credits(db, uid)
+    if credits < MIN_CREDITS_TO_CHAT:
+        return JSONResponse(
+            content={"detail": "Insufficient credits", "credits": credits, "required": MIN_CREDITS_TO_CHAT},
+            status_code=402,
+        )
+    # Proxy to rakeshent
+    path_norm = "v1/chat/completions"
+    url = f"{STOCK_GITA_BASE}/{path_norm}"
+    if request.url.query:
+        url = f"{url}?{request.url.query}"
+    headers = {k: v for k, v in request.headers.items() if k.lower() not in ("host", "connection", "transfer-encoding")}
+    body = await request.body()
+    async with httpx.AsyncClient(timeout=120.0) as client:
+        try:
+            resp = await client.request(request.method, url, headers=headers, content=body)
+        except httpx.RequestError as e:
+            log.exception("Proxy error to %s: %s", url, e)
+            return Response(content=f"Proxy error: {str(e)}", status_code=502, media_type="text/plain")
+    out_headers = {
+        k: v for k, v in resp.headers.items()
+        if k.lower() not in ("transfer-encoding", "content-encoding", "connection", "content-length")
+    }
+    if resp.headers.get("content-type", "").startswith("text/event-stream"):
+        async def stream():
+            async for chunk in resp.aiter_bytes():
+                yield chunk
+        return StreamingResponse(stream(), status_code=resp.status_code, headers=out_headers, media_type=resp.headers.get("content-type"))
+    return Response(
+        content=resp.content,
+        status_code=resp.status_code,
+        headers=out_headers,
+        media_type=resp.headers.get("content-type", "application/octet-stream"),
+    )
 
 
 @app.api_route("/{path:path}", methods=["GET", "POST", "PUT", "DELETE", "PATCH"])

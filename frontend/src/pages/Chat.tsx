@@ -26,6 +26,7 @@ import remarkGfm from "remark-gfm";
 import type { ChatMessage as ChatMessageType, ChatModel } from "@/lib/chat-api";
 import { sendChatMessage } from "@/lib/chat-api";
 import * as chatSessions from "@/lib/chat-sessions";
+import { getMe } from "@/lib/credits-api";
 import type { ChatSession } from "@/lib/chat-sessions";
 import { useLocation } from "wouter";
 import { useAuth } from "@/contexts/AuthContext";
@@ -280,10 +281,27 @@ export default function Chat() {
     };
   }, []);
 
+  const MIN_CREDITS_TO_CHAT = 100;
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     const text = input.trim();
     if (!text || loading || !idToken) return;
+
+    try {
+      const me = await getMe(idToken);
+      if (me.credits < MIN_CREDITS_TO_CHAT) {
+        toast({
+          title: "Insufficient credits",
+          description: `You need at least ${MIN_CREDITS_TO_CHAT} credits to chat. You have ${me.credits.toLocaleString()}. Add credits in Profile.`,
+          variant: "destructive",
+        });
+        return;
+      }
+    } catch {
+      toast({ title: "Could not check credits", variant: "destructive" });
+      return;
+    }
 
     const userMessage: ChatMessageType = { role: "user", content: text };
     setInput("");
@@ -302,20 +320,27 @@ export default function Chat() {
       await chatSessions.addMessage(idToken, chatId, "user", text);
 
       const nextMessages: ChatMessageType[] = [...messages, userMessage];
-      const result = await sendChatMessage(nextMessages, model);
+      const result = await sendChatMessage(nextMessages, model, idToken);
       const content = result.content;
       setMessages((prev) => [...prev, { role: "assistant", content }]);
       await chatSessions.addMessage(idToken, chatId, "assistant", content);
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : "Something went wrong.";
+      const isInsufficientCredits = errorMessage.toLowerCase().includes("insufficient credits");
       setMessages((prev) => [
         ...prev,
         {
           role: "assistant",
-          content: `**Error**\n\n${errorMessage}\n\nPlease check that the backend is running and try again.`,
+          content: isInsufficientCredits
+            ? `**Insufficient credits**\n\n${errorMessage}\n\nAdd credits in your [Profile](/profile) to continue.`
+            : `**Error**\n\n${errorMessage}\n\nPlease check that the backend is running and try again.`,
         },
       ]);
-      toast({ title: "Error", description: errorMessage, variant: "destructive" });
+      toast({
+        title: isInsufficientCredits ? "Insufficient credits" : "Error",
+        description: errorMessage,
+        variant: "destructive",
+      });
     } finally {
       setLoading(false);
       textareaRef.current?.focus();
