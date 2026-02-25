@@ -2,7 +2,7 @@ import json
 import logging
 import os
 import time
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from urllib.parse import unquote
 
@@ -46,6 +46,11 @@ class RegisterBody(BaseModel):
     idToken: str
     displayName: str = ""
     email: str = ""
+
+
+class UpdateProfileBody(BaseModel):
+    idToken: str
+    displayName: str
 
 
 class CreateChatBody(BaseModel):
@@ -205,6 +210,36 @@ async def auth_register(body: RegisterBody):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@app.patch("/auth/profile")
+async def update_profile(body: UpdateProfileBody):
+    """Update user profile (displayName) in Firestore."""
+    try:
+        app_fb, db = _get_firebase()
+        if app_fb is None or db is None:
+            return JSONResponse(content={"ok": False, "error": "Firebase not configured"}, status_code=503)
+        from firebase_admin import auth as fb_auth, firestore as _fstore
+        decoded = fb_auth.verify_id_token(body.idToken)
+        uid = decoded.get("uid")
+        if not uid:
+            raise HTTPException(status_code=401, detail="Invalid token")
+        display_name = (body.displayName or "").strip()
+        if not display_name:
+            raise HTTPException(status_code=400, detail="displayName is required")
+        users_ref = db.collection("users").document(uid)
+        users_ref.set({
+            "displayName": display_name,
+            "updatedAt": _fstore.SERVER_TIMESTAMP,
+        }, merge=True)
+        return {"ok": True, "uid": uid}
+    except HTTPException:
+        raise
+    except Exception as e:
+        log.exception("auth/profile update failed: %s", e)
+        if "Firebase" in str(e) or "token" in str(e).lower():
+            raise HTTPException(status_code=401, detail="Invalid or expired token")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 # ----- Chat sessions API (Firestore) -----
 
 @app.get("/api/chats")
@@ -215,8 +250,9 @@ async def list_chats(request: Request):
     if db is None:
         raise HTTPException(status_code=503, detail="Database not configured")
     from firebase_admin import firestore as _fstore
+    from google.cloud.firestore_v1 import FieldFilter
     chats_ref = db.collection("chats")
-    query = chats_ref.where("userId", "==", uid).limit(100)
+    query = chats_ref.where(filter=FieldFilter("userId", "==", uid)).limit(100)
     try:
         docs = list(query.stream())
     except Exception as e:
@@ -527,8 +563,9 @@ async def get_my_transactions(request: Request):
     if db is None:
         raise HTTPException(status_code=503, detail="Database not configured")
     from firebase_admin import firestore as _fstore
+    from google.cloud.firestore_v1 import FieldFilter
     try:
-        query = db.collection("payments").where("userId", "==", uid).order_by("createdAt", direction=_fstore.Query.DESCENDING).limit(50)
+        query = db.collection("payments").where(filter=FieldFilter("userId", "==", uid)).order_by("createdAt", direction=_fstore.Query.DESCENDING).limit(50)
         docs = list(query.stream())
     except Exception as e:
         log.warning("Payments query failed (index may be needed): %s", e)
@@ -591,13 +628,14 @@ async def get_my_usage(request: Request, period: str = "30d"):
     if db is None:
         raise HTTPException(status_code=503, detail="Database not configured")
     from firebase_admin import firestore as _fstore
+    from google.cloud.firestore_v1 import FieldFilter
     days = 30 if period == "30d" else 7
-    since = datetime.utcnow() - timedelta(days=days)
+    since = datetime.now(timezone.utc) - timedelta(days=days)
     try:
         query = (
             db.collection("usage_log")
-            .where("userId", "==", uid)
-            .where("createdAt", ">=", since)
+            .where(filter=FieldFilter("userId", "==", uid))
+            .where(filter=FieldFilter("createdAt", ">=", since))
             .limit(500)
         )
         docs = list(query.stream())
@@ -623,7 +661,7 @@ async def get_my_usage(request: Request, period: str = "30d"):
         by_day[day_key] = by_day.get(day_key, 0) + int(d.get("creditsUsed", 0))
     dates = []
     for i in range(days - 1, -1, -1):
-        d = (datetime.utcnow() - timedelta(days=i)).date()
+        d = (datetime.now(timezone.utc) - timedelta(days=i)).date()
         dates.append({"date": d.isoformat(), "creditsUsed": by_day.get(d.isoformat(), 0)})
     return {"usage": dates, "period": period}
 

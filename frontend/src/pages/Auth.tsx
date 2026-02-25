@@ -13,6 +13,18 @@ import logoImg from "@/assets/icon.svg";
 
 type Mode = "login" | "signup";
 
+function getAuthErrorMessage(err: unknown, fallback: string): string {
+  const msg = err instanceof Error ? err.message : String(err);
+  if (msg.includes("auth/invalid-credential") || msg.includes("auth/wrong-password")) return "Invalid email or password.";
+  if (msg.includes("auth/user-not-found")) return "No account found with this email.";
+  if (msg.includes("auth/email-already-in-use")) return "This email is already registered.";
+  if (msg.includes("auth/weak-password")) return "Password is too weak. Use at least 6 characters.";
+  if (msg.includes("auth/invalid-email")) return "Please enter a valid email address.";
+  if (msg.includes("auth/network-request-failed")) return "Network error. Please check your connection.";
+  if (msg.includes("auth/too-many-requests")) return "Too many attempts. Please try again later.";
+  return msg || fallback;
+}
+
 const formVariants = {
   initial: { opacity: 0, y: 12 },
   animate: { opacity: 1, y: 0 },
@@ -24,7 +36,6 @@ export default function Auth() {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const { signUp, signIn, signInWithGoogle } = useAuth();
@@ -32,7 +43,6 @@ export default function Auth() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setError("");
     setLoading(true);
     try {
       if (mode === "signup") {
@@ -42,22 +52,20 @@ export default function Auth() {
       }
       setLocation("/");
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : mode === "signup" ? "Sign up failed" : "Login failed";
-      setError(msg);
+      const msg = getAuthErrorMessage(err, mode === "signup" ? "Sign up failed" : "Login failed");
+      toast({ title: mode === "signup" ? "Sign up failed" : "Sign in failed", description: msg, variant: "destructive" });
     } finally {
       setLoading(false);
     }
   };
 
   const handleGoogle = async () => {
-    setError("");
     setLoading(true);
     try {
       await signInWithGoogle();
       setLocation("/");
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : "Google sign-in failed";
-      setError(msg);
+      const msg = getAuthErrorMessage(err, "Google sign-in failed");
       toast({ title: "Google sign-in failed", description: msg, variant: "destructive" });
     } finally {
       setLoading(false);
@@ -66,7 +74,6 @@ export default function Auth() {
 
   const switchMode = () => {
     setMode((m) => (m === "login" ? "signup" : "login"));
-    setError("");
   };
 
   return (
@@ -154,15 +161,6 @@ export default function Auth() {
                       </button>
                     </div>
                   </div>
-                  {error && (
-                    <motion.p
-                      initial={{ opacity: 0 }}
-                      animate={{ opacity: 1 }}
-                      className="text-sm text-destructive"
-                    >
-                      {error}
-                    </motion.p>
-                  )}
                   <Button type="submit" className="w-full glow-button" disabled={loading}>
                     {loading ? "Signing in…" : "Sign in"}
                   </Button>
@@ -225,15 +223,6 @@ export default function Auth() {
                       </button>
                     </div>
                   </div>
-                  {error && (
-                    <motion.p
-                      initial={{ opacity: 0 }}
-                      animate={{ opacity: 1 }}
-                      className="text-sm text-destructive"
-                    >
-                      {error}
-                    </motion.p>
-                  )}
                   <Button type="submit" className="w-full glow-button" disabled={loading}>
                     {loading ? "Creating account…" : "Create account"}
                   </Button>

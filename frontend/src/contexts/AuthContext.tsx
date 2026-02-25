@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useState } from "react";
+import React, { createContext, useContext, useEffect, useReducer, useState } from "react";
 import type { User } from "firebase/auth";
 import {
   createUserWithEmailAndPassword,
@@ -22,6 +22,7 @@ type AuthContextValue = {
   signInWithGoogle: () => Promise<void>;
   signOut: () => Promise<void>;
   updatePassword: (currentPassword: string, newPassword: string) => Promise<void>;
+  updateDisplayName: (displayName: string) => Promise<void>;
 };
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -30,6 +31,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [idToken, setIdToken] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [, forceUpdate] = useReducer((x: number) => x + 1, 0);
 
   const auth = getFirebaseAuth();
 
@@ -120,9 +122,34 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const updatePassword = async (currentPassword: string, newPassword: string) => {
     if (!user || !user.email) throw new Error("You must be signed in with email to change password.");
+    const { EmailAuthProvider, reauthenticateWithCredential, updatePassword: firebaseUpdatePassword } = await import("firebase/auth");
     const credential = EmailAuthProvider.credential(user.email, currentPassword);
     await reauthenticateWithCredential(user, credential);
     await firebaseUpdatePassword(user, newPassword);
+  };
+
+  const updateDisplayName = async (displayName: string) => {
+    if (!user) throw new Error("You must be signed in to update your name.");
+    const name = displayName.trim();
+    if (!name) throw new Error("Name cannot be empty.");
+    await updateProfile(user, { displayName: name });
+    const token = await user.getIdToken(true);
+    setIdToken(token);
+    try {
+      const res = await fetch(`${API_BASE}/auth/profile`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ idToken: token, displayName: name }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error((err as { detail?: string; error?: string }).detail || (err as { detail?: string; error?: string }).error || "Failed to update profile");
+      }
+    } catch (e) {
+      if (e instanceof Error) throw e;
+      throw new Error("Failed to update profile");
+    }
+    forceUpdate();
   };
 
   return (
@@ -136,6 +163,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         signInWithGoogle,
         signOut,
         updatePassword,
+        updateDisplayName,
       }}
     >
       {children}

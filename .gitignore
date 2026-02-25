@@ -94,6 +94,9 @@ htmlcov/
 .dmypy.json
 dmypy.json
 
+# Certbot (Let's Encrypt)
+certbot/
+
 # Project specific
 *.pyc
 __pycache__/

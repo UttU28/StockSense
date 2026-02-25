@@ -13,7 +13,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import { Eye, EyeOff, Coins, Receipt, BarChart3, ArrowLeft, Plus, Mail, KeyRound, ChevronDown, ChevronUp } from "lucide-react";
+import { Eye, EyeOff, Coins, Receipt, BarChart3, ArrowLeft, Plus, Mail, KeyRound, ChevronDown, ChevronUp, Pencil } from "lucide-react";
 import {
   BarChart,
   Bar,
@@ -30,7 +30,7 @@ import { getMe, getTransactions, getUsageHistory, type Transaction, type UsageDa
 import logoImg from "@/assets/icon.svg";
 
 export default function Profile() {
-  const { user, idToken, loading: authLoading, updatePassword } = useAuth();
+  const { user, idToken, loading: authLoading, updatePassword, updateDisplayName } = useAuth();
   const [, setLocation] = useLocation();
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
@@ -44,6 +44,9 @@ export default function Profile() {
   const [usageData, setUsageData] = useState<UsageDay[]>([]);
   const [usageLoading, setUsageLoading] = useState(false);
   const [passwordOpen, setPasswordOpen] = useState(false);
+  const [nameOpen, setNameOpen] = useState(false);
+  const [nameInput, setNameInput] = useState("");
+  const [nameLoading, setNameLoading] = useState(false);
   const [transactionsExpanded, setTransactionsExpanded] = useState(false);
 
   useEffect(() => {
@@ -84,6 +87,26 @@ export default function Profile() {
   }, [idToken, usagePeriod]);
 
   const isEmailUser = user?.email && user?.providerData?.some((p) => p.providerId === "password");
+
+  const handleUpdateName = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const name = nameInput.trim();
+    if (!name) {
+      toast({ title: "Name required", description: "Please enter a name.", variant: "destructive" });
+      return;
+    }
+    setNameLoading(true);
+    try {
+      await updateDisplayName(name);
+      toast({ title: "Name updated", description: "Your display name has been updated." });
+      setNameOpen(false);
+      setNameInput("");
+    } catch (err: unknown) {
+      toast({ title: "Update failed", description: err instanceof Error ? err.message : "Could not update name", variant: "destructive" });
+    } finally {
+      setNameLoading(false);
+    }
+  };
 
   const handleUpdatePassword = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -151,9 +174,57 @@ export default function Profile() {
                   <img src={logoImg} alt="" className="w-8 h-8 sm:w-12 sm:h-12 object-contain" />
                 </div>
                 <div className="text-center sm:text-left min-w-0 flex-1">
-                  <h1 className="text-xl sm:text-2xl md:text-3xl font-display font-bold text-foreground truncate">
-                    {user.displayName || "Member"}
-                  </h1>
+                  <div className="flex items-center justify-center sm:justify-start gap-2 flex-wrap">
+                    <h1 className="text-xl sm:text-2xl md:text-3xl font-display font-bold text-foreground truncate">
+                      {user.displayName || "Member"}
+                    </h1>
+                    <Dialog open={nameOpen} onOpenChange={(open) => { setNameOpen(open); if (open) setNameInput(user.displayName || ""); }}>
+                      <DialogTrigger asChild>
+                        <button
+                          type="button"
+                          className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors shrink-0"
+                          aria-label="Edit name"
+                        >
+                          <Pencil className="w-4 h-4" />
+                        </button>
+                      </DialogTrigger>
+                      <DialogContent className="sm:max-w-md p-8 glass-card border-border/50 shadow-xl shadow-primary/5 font-sans">
+                        <DialogHeader>
+                          <div className="flex flex-col items-center gap-3 mb-6">
+                            <img src={logoImg} alt="Stock Sense" className="h-12 w-12 object-contain" />
+                            <h2 className="font-display font-bold text-2xl sm:text-3xl text-center text-foreground tracking-tight">
+                              Stock Sense
+                            </h2>
+                          </div>
+                          <div className="text-center mb-6">
+                            <DialogTitle className="font-display font-bold text-xl sm:text-2xl text-foreground tracking-tight">
+                              Edit name
+                            </DialogTitle>
+                            <p className="mt-1.5 text-sm text-muted-foreground font-sans">
+                              Update your display name. This will be shown in the navbar and profile.
+                            </p>
+                          </div>
+                        </DialogHeader>
+                        <form onSubmit={handleUpdateName} className="space-y-4">
+                          <div>
+                            <Label htmlFor="display-name" className="font-medium text-foreground">Name</Label>
+                            <Input
+                              id="display-name"
+                              type="text"
+                              placeholder="Your name"
+                              value={nameInput}
+                              onChange={(e) => setNameInput(e.target.value)}
+                              className="mt-1.5 transition-all focus:ring-2 focus:ring-primary/20"
+                              maxLength={50}
+                            />
+                          </div>
+                          <Button type="submit" disabled={nameLoading} className="w-full glow-button">
+                            {nameLoading ? "Saving…" : "Save"}
+                          </Button>
+                        </form>
+                      </DialogContent>
+                    </Dialog>
+                  </div>
                   <p className="text-muted-foreground mt-0.5 text-sm sm:text-base flex items-center justify-center sm:justify-start gap-2 truncate">
                     <Mail className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" />
                     <span className="truncate">{user.email || "—"}</span>
