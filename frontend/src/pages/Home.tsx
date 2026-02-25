@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { useAuth } from "@/contexts/AuthContext";
 import { AppNavbar } from "@/components/AppNavbar";
 import { StockTicker } from "@/components/StockTicker";
+import logoImg from "@/assets/icon.svg";
 
 const features = [
   {
@@ -39,6 +40,7 @@ export default function Home() {
           transition={{ duration: 0.5 }}
           className="flex flex-col items-center text-center pt-12 md:pt-20 pb-16"
         >
+          <img src={logoImg} alt="Stock Sense" className="h-16 w-16 md:h-20 md:w-20 mb-4 object-contain" />
           <h1 className="text-4xl md:text-6xl lg:text-7xl font-bold font-display text-foreground tracking-tight mb-4">
             Stock Sense
           </h1>

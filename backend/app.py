@@ -1,6 +1,7 @@
 import json
 import logging
 import os
+import time
 from datetime import datetime, timedelta
 from pathlib import Path
 from urllib.parse import unquote
@@ -128,16 +129,27 @@ async def health():
     return {"status": "ok", "proxy_target": STOCK_GITA_BASE, "ticker": "yfinance"}
 
 
+# In-memory cache for ticker batch (5 min TTL)
+_ticker_cache: dict[str, tuple[dict, float]] = {}
+TICKER_CACHE_TTL_SEC = 300  # 5 minutes
+
+
 @app.get("/api/ticker/batch/{symbols:path}")
 async def ticker_batch(symbols: str):
     """Serve ticker data using free Yahoo Finance (yfinance) by default from this backend."""
-    symbols = unquote(symbols)
+    symbols_raw = unquote(symbols)
+    cache_key = symbols_raw
+    now = time.time()
+    if cache_key in _ticker_cache:
+        cached_data, cached_at = _ticker_cache[cache_key]
+        if now - cached_at < TICKER_CACHE_TTL_SEC:
+            return JSONResponse(content={"data": cached_data})
     try:
         import yfinance as yf
     except ImportError:
         log.warning("yfinance not installed; pip install yfinance")
         return JSONResponse(content={"data": {}}, status_code=503)
-    symbol_list = [s.strip() for s in symbols.split(",") if s.strip()]
+    symbol_list = [s.strip() for s in symbols_raw.split(",") if s.strip()]
     if not symbol_list:
         return JSONResponse(content={"data": {}})
     results = {}
@@ -158,6 +170,7 @@ async def ticker_batch(symbols: str):
         except Exception as e:
             log.warning("Ticker error for %s: %s", symbol, e)
             results[symbol] = {"error": str(e), "currentPrice": 0, "change": 0, "changePercent": 0}
+    _ticker_cache[cache_key] = (results, time.time())
     return JSONResponse(content={"data": results})
 
 
@@ -650,7 +663,6 @@ async def proxy_to_rakeshent(path: str, request: Request):
         headers=out_headers,
         media_type=resp.headers.get("content-type", "application/octet-stream"),
     )
-
 
 if __name__ == "__main__":
     import uvicorn

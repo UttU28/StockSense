@@ -1,11 +1,12 @@
 import { Link, useLocation } from "wouter";
-import { BarChart3, Home, MessageCircle, Menu, Moon, SunMedium, User, LogOut, DollarSign } from "lucide-react";
+import { Home, MessageCircle, Menu, Moon, SunMedium, User, LogOut, DollarSign } from "lucide-react";
+import logoImg from "@/assets/icon.svg";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger, SheetClose } from "@/components/ui/sheet";
 import { useAuth } from "@/contexts/AuthContext";
 import { useEffect, useState } from "react";
 
-export function AppNavbar() {
+export function AppNavbar({ fixed = false }: { fixed?: boolean }) {
   const { user, loading: authLoading, signOut } = useAuth();
   const [location, setLocation] = useLocation();
   const [theme, setTheme] = useState<"light" | "dark">("light");
@@ -29,12 +30,12 @@ export function AppNavbar() {
   };
 
   return (
-    <header className="sticky top-0 z-50 flex-none border-b border-border bg-card/80 backdrop-blur-sm mobile-nav-stock-bg">
+    <header className={`${fixed ? "fixed top-0 left-0 right-0" : "sticky top-0"} z-50 flex-none border-b border-border bg-card/80 backdrop-blur-sm`}>
       <div className="w-full px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-14">
           <div className="flex items-center gap-3 sm:gap-6">
             <Link href="/" className="flex items-center gap-2 text-foreground hover:text-primary transition-colors shrink-0">
-              <BarChart3 className="w-6 h-6" />
+              <img src={logoImg} alt="Stock Sense" className="h-8 w-8 object-contain" />
               <span className="font-display font-bold text-lg">Stock Sense</span>
             </Link>
             {/* Desktop nav links */}
@@ -61,20 +62,23 @@ export function AppNavbar() {
             {/* Desktop auth area */}
             {!authLoading && (
               user ? (
-                <div className="hidden sm:flex items-center gap-2">
-                  <span className="text-sm text-muted-foreground truncate max-w-[120px] sm:max-w-[180px]" title={user.email ?? undefined}>
+                <div className="hidden sm:flex items-center gap-4">
+                  <Link
+                    href="/profile"
+                    className="flex items-center gap-1.5 text-sm font-bold text-foreground hover:text-primary transition-colors truncate max-w-[140px] sm:max-w-[200px]"
+                    title={user.email ?? undefined}
+                  >
+                    <User className="w-4 h-4 shrink-0" />
                     {user.displayName || user.email || "User"}
-                  </span>
-                  <Link href="/profile">
-                    <Button variant="ghost" size="sm" className="gap-1.5">
-                      <User className="w-4 h-4" />
-                      <span className="hidden sm:inline">Profile</span>
-                    </Button>
                   </Link>
-                  <Button variant="outline" size="sm" className="gap-1.5 border-border" onClick={handleLogout}>
+                  <button
+                    type="button"
+                    onClick={handleLogout}
+                    className="flex items-center gap-1.5 text-sm font-medium text-destructive hover:text-destructive/80 transition-colors"
+                  >
                     <LogOut className="w-4 h-4" />
                     <span className="hidden sm:inline">Log out</span>
-                  </Button>
+                  </button>
                 </div>
               ) : (
                 <Link href="/auth" className="hidden sm:inline-flex">
@@ -86,14 +90,14 @@ export function AppNavbar() {
               type="button"
               variant="ghost"
               size="icon"
-              className="glow-button h-8 w-8 rounded-full border border-border/60"
+              className="h-9 w-9 rounded-lg hover:bg-muted/50 transition-colors focus-visible:ring-0 focus-visible:ring-offset-0"
               onClick={toggleTheme}
               aria-label={theme === "dark" ? "Switch to light theme" : "Switch to dark theme"}
             >
               {theme === "dark" ? (
-                <SunMedium className="h-4 w-4" />
+                <SunMedium className="h-4 w-4 text-foreground" />
               ) : (
-                <Moon className="h-4 w-4" />
+                <Moon className="h-4 w-4 text-foreground" />
               )}
             </Button>
             {/* Mobile menu */}
@@ -110,7 +114,8 @@ export function AppNavbar() {
                 </Button>
               </SheetTrigger>
               <SheetContent side="top" className="w-full max-w-none px-4 pt-16 pb-6">
-                <div className="mb-4 flex items-center justify-between">
+                <div className="mb-4 flex items-center gap-2">
+                  <img src={logoImg} alt="Stock Sense" className="h-9 w-9 object-contain" />
                   <span className="font-display font-semibold text-2xl text-foreground">
                     Stock Sense
                   </span>

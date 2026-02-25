@@ -20,7 +20,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
-import { Send, Loader2, BarChart3, X, Mic, MessageSquarePlus, Menu, MessageCircle, PanelLeftClose, PanelLeft, Pencil, Trash2 } from "lucide-react";
+import { Send, Loader2, X, Mic, MessageSquarePlus, Menu, MessageCircle, PanelLeftClose, PanelLeft, Pencil, Trash2 } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import type { ChatMessage as ChatMessageType, ChatModel } from "@/lib/chat-api";
@@ -131,6 +131,7 @@ export default function Chat() {
   const [editingTitle, setEditingTitle] = useState("");
   const [deleteConfirmChatId, setDeleteConfirmChatId] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
   const recognitionRef = useRef<SpeechRecognitionInstance | null>(null);
 
   const loadChatList = useCallback(async () => {
@@ -317,6 +318,7 @@ export default function Chat() {
       toast({ title: "Error", description: errorMessage, variant: "destructive" });
     } finally {
       setLoading(false);
+      textareaRef.current?.focus();
     }
   }
 
@@ -451,7 +453,7 @@ export default function Chat() {
 
   return (
     <div className="h-screen flex flex-col overflow-hidden">
-      <AppNavbar />
+      <AppNavbar fixed />
 
       <AlertDialog open={deleteConfirmChatId !== null} onOpenChange={(open: boolean) => !open && closeDeleteConfirm()}>
         <AlertDialogContent className="sm:max-w-md border-border bg-card">
@@ -475,7 +477,7 @@ export default function Chat() {
         </AlertDialogContent>
       </AlertDialog>
 
-      <div className="flex flex-1 min-h-0 overflow-hidden">
+      <div className="flex flex-1 min-h-0 overflow-hidden pt-14">
         {/* Sidebar – fixed on the side, only main content scrolls */}
         <aside
           className={`hidden lg:flex flex-col shrink-0 h-full border-r border-border bg-card/50 transition-[width] duration-200 overflow-hidden ${
@@ -490,28 +492,28 @@ export default function Chat() {
             <Button
               variant="ghost"
               size="icon"
-              className="lg:hidden fixed top-14 left-4 z-40 border border-border bg-card/80"
+              className="lg:hidden fixed top-16 left-4 z-40 border border-border bg-card/80"
               aria-label="Open chat list"
             >
               <Menu className="w-5 h-5" />
             </Button>
           </SheetTrigger>
-          <SheetContent side="left" className="w-72 p-4 flex flex-col">
+          <SheetContent side="left" className="w-[min(20rem,85vw)] p-4 flex flex-col">
             <div className="flex-1 flex flex-col min-h-0 mt-2">
               {renderSidebarContent(true)}
             </div>
           </SheetContent>
         </Sheet>
 
-        {/* Main chat area – this is the only scrollable region */}
-        <main className="flex-1 flex flex-col min-w-0 min-h-0 overflow-y-auto p-4 sm:p-6 lg:p-8">
-          <div className="max-w-4xl mx-auto w-full flex flex-col">
+        {/* Main chat area – scrollable, overscroll contained so navbar stays fixed */}
+        <main className="flex-1 flex flex-col min-w-0 min-h-0 overflow-y-auto overflow-x-hidden overscroll-contain p-3 sm:p-6 lg:p-8 pl-4 sm:pl-6 lg:pl-8 pt-6 sm:pt-8">
+          <div className="max-w-4xl mx-auto w-full flex flex-col min-w-0">
           {loadingChat ? (
             <div className="flex-1 flex items-center justify-center py-12">
               <p className="text-muted-foreground">Loading chat…</p>
             </div>
           ) : (
-            <div className="space-y-6 pb-28">
+            <div className="space-y-4 sm:space-y-6 pt-12 pb-36 sm:pb-32">
               {messages.map((msg, i) => (
                 <div
                   key={i}
@@ -524,19 +526,16 @@ export default function Chat() {
                   <Card
                     className={
                       msg.role === "user"
-                        ? "max-w-[85%] sm:max-w-[75%] bg-primary/15 border-primary/30 text-foreground"
-                        : "w-full bg-card/80 border-border"
+                        ? "max-w-[92%] sm:max-w-[75%] bg-primary/15 border-primary/30 text-foreground"
+                        : "w-full max-w-full bg-card/80 border-border overflow-hidden"
                     }
                   >
                     <div className="flex gap-2 p-3 sm:p-4">
-                      {msg.role === "assistant" && (
-                        <BarChart3 className="w-5 h-5 text-primary shrink-0 mt-0.5" />
-                      )}
                       <div
                         className={
                           msg.role === "user"
                             ? "break-words"
-                            : "prose prose-invert prose-sm max-w-none break-words [&_table]:text-xs [&_th]:px-2 [&_td]:px-2 [&_ul]:my-2 [&_ol]:my-2"
+                            : "prose prose-invert prose-sm max-w-none break-words [&_table]:text-xs [&_th]:px-2 [&_td]:px-2 [&_ul]:my-2 [&_ol]:my-2 [&_img]:max-w-full"
                         }
                       >
                         {msg.role === "user" ? (
@@ -568,54 +567,56 @@ export default function Chat() {
         </main>
       </div>
 
-      {/* Fixed input bar – solid background to the bottom so nothing shows below */}
+      {/* Fixed input bar – full width on mobile, solid background like ChatGPT */}
       <div
-        className={`fixed bottom-0 left-0 right-0 bg-transparent border-t border-none pt-4 pb-[env(safe-area-inset-bottom)] sm:pb-4 transition-[left] duration-200 ${
-          sidebarCollapsed ? "lg:left-16" : "lg:left-64"
+        className={`fixed inset-x-0 bottom-0 z-30 border-t border-border bg-background/95 backdrop-blur-md pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:pt-4 sm:pb-4 transition-[margin-left] duration-200 ${
+          sidebarCollapsed ? "lg:ml-16" : "lg:ml-64"
         }`}
       >
-        <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="max-w-4xl mx-auto px-3 sm:px-6 lg:px-8">
           <form
             onSubmit={handleSubmit}
-            className="rounded-[1.25rem] border border-border bg-card shadow-sm flex items-stretch gap-2 p-2.5 sm:p-3 min-h-[52px]"
+            className="rounded-2xl sm:rounded-[1.25rem] border border-border bg-card shadow-sm flex items-stretch gap-2 p-2 sm:p-3 min-h-[48px] sm:min-h-[52px]"
           >
             <button
-              type="button"
-              onClick={() => setInput("")}
-              className="shrink-0 p-2 rounded-xl text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors self-center"
-              aria-label="Clear"
-            >
-              <X className="w-4 h-4" />
-            </button>
+                type="button"
+                onClick={() => setInput("")}
+                className="hidden sm:flex shrink-0 p-2 rounded-xl text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors self-center items-center justify-center"
+                aria-label="Clear"
+              >
+                <X className="w-4 h-4" />
+              </button>
             <Textarea
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              placeholder="e.g. Analyze AAPL, Scan market, Seasonality for NVDA..."
-              className="min-h-[44px] max-h-[280px] resize-none flex-1 min-w-0 bg-muted/40 border-0 rounded-xl shadow-none focus-visible:ring-0 focus-visible:ring-offset-0 placeholder:text-muted-foreground py-2.5 px-3 text-base"
-              rows={1}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" && !e.shiftKey) {
-                  e.preventDefault();
-                  handleSubmit(e);
-                }
-              }}
-              disabled={loading}
-            />
-            <div className="flex items-center gap-2 shrink-0 border-l border-border pl-2.5">
-              <Select value={model} onValueChange={(v) => setModel(v as ChatModel)}>
-                <SelectTrigger className="w-[120px] sm:w-[140px] h-9 border-border bg-background rounded-lg">
-                  <SelectValue placeholder="Model" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="stock-gita-model">Pro (default)</SelectItem>
-                  <SelectItem value="stock-gita-master">Master</SelectItem>
-                  <SelectItem value="stock-gita-seasonality">Seasonality</SelectItem>
-                </SelectContent>
-              </Select>
+                ref={textareaRef}
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                placeholder="Analyze AAPL, Scan market..."
+                className="min-h-[40px] sm:min-h-[44px] max-h-[200px] sm:max-h-[280px] resize-none flex-1 min-w-0 bg-muted/40 border-0 rounded-xl shadow-none focus-visible:ring-0 focus-visible:ring-offset-0 placeholder:text-muted-foreground py-2.5 px-2 sm:px-3 text-sm sm:text-base"
+                rows={1}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && !e.shiftKey) {
+                    e.preventDefault();
+                    handleSubmit(e);
+                  }
+                }}
+              />
+            <div className="flex items-center gap-2 shrink-0 border-l border-border pl-2 sm:pl-2.5">
+              <div className="hidden sm:block">
+                <Select value={model} onValueChange={(v) => setModel(v as ChatModel)}>
+                  <SelectTrigger className="w-[120px] lg:w-[140px] h-9 border-border bg-background rounded-lg">
+                    <SelectValue placeholder="Model" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="stock-gita-model">Pro (default)</SelectItem>
+                    <SelectItem value="stock-gita-master">Master</SelectItem>
+                    <SelectItem value="stock-gita-seasonality">Seasonality</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
               <button
                 type="button"
                 onClick={toggleVoiceInput}
-                className={`rounded-full h-10 w-10 flex items-center justify-center border transition-colors ${
+                className={`rounded-full h-9 w-9 sm:h-10 sm:w-10 flex items-center justify-center border transition-colors shrink-0 ${
                   isListening ? "border-destructive bg-destructive/20 text-destructive" : "border-border text-foreground hover:bg-muted/50"
                 }`}
                 aria-label={isListening ? "Stop listening" : "Voice input"}
@@ -626,7 +627,7 @@ export default function Chat() {
               <Button
                 type="submit"
                 disabled={loading || !input.trim()}
-                className="rounded-full h-10 w-10 p-0 shrink-0"
+                className="rounded-full h-9 w-9 sm:h-10 sm:w-10 p-0 shrink-0"
               >
                 {loading ? (
                   <Loader2 className="w-5 h-5 animate-spin" />

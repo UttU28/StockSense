@@ -9,6 +9,7 @@ import { Eye, EyeOff, Chrome } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "@/hooks/use-toast";
 import { AppNavbar } from "@/components/AppNavbar";
+import logoImg from "@/assets/icon.svg";
 
 type Mode = "login" | "signup";
 
@@ -82,9 +83,12 @@ export default function Auth() {
           >
           <Card className="p-8 glass-card border-border/50 shadow-xl shadow-primary/5">
             {/* Stock Sense title at top of card */}
-            <h2 className="font-display font-bold text-2xl sm:text-3xl text-center text-foreground tracking-tight mb-6">
-              Stock Sense
-            </h2>
+            <div className="flex flex-col items-center gap-3 mb-6">
+              <img src={logoImg} alt="Stock Sense" className="h-12 w-12 object-contain" />
+              <h2 className="font-display font-bold text-2xl sm:text-3xl text-center text-foreground tracking-tight">
+                Stock Sense
+              </h2>
+            </div>
             {/* Title for selected service */}
             <div className="text-center mb-6">
               <AnimatePresence mode="wait">

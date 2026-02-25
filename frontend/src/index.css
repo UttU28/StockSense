@@ -150,34 +150,6 @@
     @apply max-w-full h-auto;
   }
 
-  /* Mobile navbar subtle stock-style background */
-  .mobile-nav-stock-bg {
-    position: relative;
-    overflow: hidden;
-  }
-  .mobile-nav-stock-bg::before {
-    content: "";
-    position: absolute;
-    inset: 0;
-    background-image:
-      linear-gradient(to right, rgba(148, 163, 184, 0.18), transparent 40%),
-      repeating-linear-gradient(
-        to right,
-        rgba(148, 163, 184, 0.20),
-        rgba(148, 163, 184, 0.20) 1px,
-        transparent 1px,
-        transparent 6px
-      );
-    opacity: 0.55;
-    mix-blend-mode: soft-light;
-    pointer-events: none;
-  }
-  @media (min-width: 768px) {
-    .mobile-nav-stock-bg::before {
-      opacity: 0;
-    }
-  }
-
   /* Stock ticker marquee */
   @keyframes marquee {
     from { transform: translateX(0); }
