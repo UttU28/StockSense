@@ -16,6 +16,8 @@ const API_BASE = import.meta.env.VITE_API_URL ?? "";
 type AuthContextValue = {
   user: User | null;
   idToken: string | null;
+  /** Get a fresh token (forces refresh if expired). Use before sensitive API calls. */
+  getIdToken: () => Promise<string | null>;
   loading: boolean;
   signUp: (name: string, email: string, password: string) => Promise<void>;
   signIn: (email: string, password: string) => Promise<void>;
@@ -120,6 +122,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setIdToken(null);
   };
 
+  const getIdToken = async (): Promise<string | null> => {
+    if (!user) return null;
+    try {
+      const token = await user.getIdToken(true);
+      setIdToken(token);
+      return token;
+    } catch {
+      return null;
+    }
+  };
+
   const updatePassword = async (currentPassword: string, newPassword: string) => {
     if (!user || !user.email) throw new Error("You must be signed in with email to change password.");
     const { EmailAuthProvider, reauthenticateWithCredential, updatePassword: firebaseUpdatePassword } = await import("firebase/auth");
@@ -157,6 +170,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       value={{
         user,
         idToken,
+        getIdToken,
         loading,
         signUp,
         signIn,

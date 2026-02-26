@@ -115,7 +115,7 @@ function truncateTitle(text: string, max = 28): string {
 }
 
 export default function Chat() {
-  const { user, loading: authLoading, idToken } = useAuth();
+  const { user, loading: authLoading, idToken, getIdToken } = useAuth();
   const [, setLocation] = useLocation();
   const [chats, setChats] = useState<ChatSession[]>([]);
   const [currentChatId, setCurrentChatId] = useState<string | null>(null);
@@ -286,10 +286,16 @@ export default function Chat() {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     const text = input.trim();
-    if (!text || loading || !idToken) return;
+    if (!text || loading || !user) return;
+
+    const token = await getIdToken();
+    if (!token) {
+      toast({ title: "Authentication failed", description: "Please sign in again.", variant: "destructive" });
+      return;
+    }
 
     try {
-      const me = await getMe(idToken);
+      const me = await getMe(token);
       if (me.credits < MIN_CREDITS_TO_CHAT) {
         toast({
           title: "Insufficient credits",
@@ -312,32 +318,35 @@ export default function Chat() {
     try {
       if (!chatId) {
         const title = truncateTitle(text, 40);
-        const created = await chatSessions.createChat(idToken, title);
+        const created = await chatSessions.createChat(token, title);
         chatId = created.id;
         setCurrentChatId(chatId);
         setChats((prev) => [{ id: created.id, title: created.title }, ...prev]);
       }
-      await chatSessions.addMessage(idToken, chatId, "user", text);
+      await chatSessions.addMessage(token, chatId, "user", text);
 
       const nextMessages: ChatMessageType[] = [...messages, userMessage];
-      const result = await sendChatMessage(nextMessages, model, idToken);
+      const result = await sendChatMessage(nextMessages, model, token);
       const content = result.content;
       setMessages((prev) => [...prev, { role: "assistant", content }]);
-      await chatSessions.addMessage(idToken, chatId, "assistant", content);
+      await chatSessions.addMessage(token, chatId, "assistant", content);
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : "Something went wrong.";
       const isInsufficientCredits = errorMessage.toLowerCase().includes("insufficient credits");
+      const isAuthError = errorMessage.toLowerCase().includes("authentication");
       setMessages((prev) => [
         ...prev,
         {
           role: "assistant",
           content: isInsufficientCredits
             ? `**Insufficient credits**\n\n${errorMessage}\n\nAdd credits in your [Profile](/profile) to continue.`
-            : `**Error**\n\n${errorMessage}\n\nPlease check that the backend is running and try again.`,
+            : isAuthError
+              ? `**Authentication required**\n\n${errorMessage}\n\nPlease [sign out](/auth) and sign in again to refresh your session.`
+              : `**Error**\n\n${errorMessage}\n\nPlease check that the backend is running and try again.`,
         },
       ]);
       toast({
-        title: isInsufficientCredits ? "Insufficient credits" : "Error",
+        title: isInsufficientCredits ? "Insufficient credits" : isAuthError ? "Authentication required" : "Error",
         description: errorMessage,
         variant: "destructive",
       });
