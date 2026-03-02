@@ -3,3 +3,5 @@ dist
 .DS_Store
 vite.config.ts.*
 *.tar.gz
+
+package-lock.json

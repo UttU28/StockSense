@@ -2,40 +2,123 @@ import { useState } from "react";
 import { motion } from "framer-motion";
 import { Link, useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
-import { Check, Coins, ArrowLeft } from "lucide-react";
+import { Check, ArrowLeft, Target, Brain, KeyRound, Sparkles } from "lucide-react";
 import { AppNavbar } from "@/components/AppNavbar";
 import { StockTicker } from "@/components/StockTicker";
 import { useAuth } from "@/contexts/AuthContext";
 import { createCheckoutSession } from "@/lib/credits-api";
 import { toast } from "@/hooks/use-toast";
 
-const plans = [
+type TierPlan = {
+  id: string;
+  name: string;
+  subtitle: string;
+  aliasNames: string[];
+  price: number;
+  recommended?: boolean;
+  whoItsFor: string[];
+  deliverables: string[];
+  limitations?: string[];
+  keyFraming: string;
+  upgradePsychology?: string;
+  additionalBenefits?: { title: string; items: string[] }[];
+};
+
+const tiers: TierPlan[] = [
   {
-    name: "Starter",
+    id: "tier1",
+    name: "Tier 1",
+    subtitle: "Stock Bias Engine (Version 1)",
+    aliasNames: ["Core Market Engine", "Structured Equity Plan", "Regime-Aware Stock Signals", "Foundation Plan"],
     price: 20,
-    credits: "150,000",
-    perCredit: "7,500",
-    description: "One-time credit recharge to get started.",
-    features: ["AI analysis & reports", "Market scan", "Seasonality", "Usage dashboard"],
+    whoItsFor: [
+      "Swing traders",
+      "Equity-only investors",
+      "Beginners to intermediate traders",
+      "People who don't want complexity",
+    ],
+    deliverables: [
+      "Market regime assessment",
+      "Trade bias (Long / Short / Skip)",
+      "When to trade / when NOT to trade",
+      "Multi-timeframe validation",
+      "Calendar alignment filtering",
+      "Entry / invalidation levels",
+      "Expected trade duration",
+    ],
+    limitations: [
+      "No options strategy access",
+      "No advanced strike/expiry modeling",
+      "No personalized adaptation",
+      "Email-only support",
+    ],
+    keyFraming: "Structured Equity Execution Without Derivatives Risk",
   },
   {
-    name: "Pro",
+    id: "tier2",
+    name: "Tier 2",
+    subtitle: "Options & Advanced Structure (Version 2)",
+    aliasNames: [],
     price: 50,
-    credits: "500,000",
-    perCredit: "10,000",
-    savePercent: 33,
-    description: "Better value — more credits per dollar.",
-    features: ["Everything in Starter", "~33% more credits per $", "Priority support"],
     recommended: true,
+    whoItsFor: [
+      "Traders ready to use leverage",
+      "Options traders",
+      "People who want expiry precision",
+      "Traders who understand risk modeling",
+    ],
+    deliverables: [
+      "Everything in Tier 1 PLUS:",
+      "Options trade eligibility detection",
+      "Expiry window modeling",
+      "Strike selection logic",
+      "Bid/ask quality assessment",
+      "Spread suitability",
+      "Multi-timeframe alignment engine",
+      "Structured options duration logic",
+      "Volatility-aware execution filtering",
+    ],
+    keyFraming: "That's the mental jump.",
+    upgradePsychology: "Tier 1: “I know when to trade stocks.” → Tier 2: “I know how to structure leveraged exposure correctly.”",
   },
   {
-    name: "Growth",
+    id: "tier3",
+    name: "Tier 3",
+    subtitle: "Personalized Architecture (Version 3)",
+    aliasNames: [],
     price: 100,
-    credits: "1,400,000",
-    perCredit: "14,000",
-    savePercent: 87,
-    description: "Best value — biggest discount on credits.",
-    features: ["Everything in Pro", "~87% more credits per $", "Dedicated support"],
+    whoItsFor: [
+      "Advanced traders",
+      "High-capital traders",
+      "Business owners",
+      "People managing serious money",
+      "Traders who want personalization",
+    ],
+    deliverables: [
+      "Everything in Tier 2 PLUS:",
+      "Personalized Strategy Profile:",
+      "Risk tolerance modeling",
+      "Short vs long-term focus",
+      "Tax preference input",
+      "Capital allocation structure",
+      "Trade frequency preference",
+      "Volatility comfort level",
+    ],
+    keyFraming: "The system adapts output style to your profile.",
+    additionalBenefits: [
+      {
+        title: "Allocation Modulation",
+        items: ["Signals don't change — sizing guidance does. That's sophisticated."],
+      },
+      {
+        title: "Beta Access — Inner circle",
+        items: ["Early strategy patches", "New algorithm releases", "Experimental integrations", "Direct feedback loop"],
+      },
+      {
+        title: "24-Hour Direct Access — White-glove",
+        items: ["Direct communication", "Priority issue handling", "Strategy clarification", "Feedback integration"],
+      },
+    ],
   },
 ];
 
@@ -44,13 +127,13 @@ export default function Pricing() {
   const [, setLocation] = useLocation();
   const [loadingTier, setLoadingTier] = useState<string | null>(null);
 
-  const handleBuyNow = async (tier: (typeof plans)[0]) => {
+  const handleGetStarted = async (tier: TierPlan) => {
     if (!user || !idToken) {
       setLocation("/auth");
       return;
     }
     const priceCents = tier.price * 100;
-    setLoadingTier(tier.name);
+    setLoadingTier(tier.id);
     try {
       const { url } = await createCheckoutSession(idToken, priceCents);
       window.location.href = url;
@@ -76,85 +159,175 @@ export default function Pricing() {
             Pricing
           </h1>
           <p className="text-muted-foreground text-lg max-w-xl mx-auto">
-            Recharge credits once. More you buy, more you save.
+            Choose the tier that fits your trading style. Structured decisions, not signals. Billed monthly.
           </p>
         </motion.section>
 
-        <motion.section
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.1, duration: 0.4 }}
-          className="mb-12"
-        >
-          <div className="flex items-center justify-center gap-2 text-muted-foreground text-sm mb-8">
-            <Coins className="w-4 h-4" />
-            <span>One-time recharge — higher packs get a better rate</span>
-          </div>
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          {tiers.map((tier, i) => (
+            <motion.div
+              key={tier.id}
+              initial={{ opacity: 0, y: 16 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.1 + i * 0.08, duration: 0.4 }}
+              className={`relative rounded-2xl border transition-all duration-300 overflow-hidden ${
+                tier.recommended
+                  ? "border-primary/40 shadow-lg shadow-primary/10 bg-card"
+                  : "border-border bg-card/80 hover:border-primary/20"
+              }`}
+            >
+              {tier.recommended && (
+                <div className="absolute top-0 left-0 right-0 py-1.5 bg-primary/20 border-b border-primary/30 text-center">
+                  <span className="text-xs font-semibold text-primary">Recommended — Mass adoption entry</span>
+                </div>
+              )}
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            {plans.map((tier, i) => (
-              <motion.div
-                key={tier.name}
-                initial={{ opacity: 0, y: 16 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.15 + i * 0.06, duration: 0.4 }}
-                className={`relative rounded-2xl p-5 glass-card border transition-all duration-300 hover:border-primary/20 ${
-                  tier.recommended ? "border-primary/40 shadow-lg shadow-primary/10" : "border-border"
-                }`}
-              >
-                {tier.recommended && (
-                  <div className="absolute -top-2.5 left-1/2 -translate-x-1/2 px-2.5 py-1 rounded-full bg-primary/20 border border-primary/30 text-primary text-xs font-medium">
-                    Recommended
+              <div className={`p-6 ${tier.recommended ? "pt-10" : ""}`}>
+                {/* Header */}
+                <div className="mb-6">
+                  <h2 className="text-xl font-bold font-display text-foreground">
+                    {tier.name}
+                  </h2>
+                  <p className="text-sm font-semibold text-primary mt-0.5">{tier.subtitle}</p>
+                  {tier.aliasNames.length > 0 && (
+                    <p className="text-xs text-muted-foreground mt-2">
+                      Also: {tier.aliasNames.join(" • ")}
+                    </p>
+                  )}
+                  <div className="mt-4 flex items-baseline gap-1">
+                    <span className="text-3xl font-bold text-foreground">${tier.price}</span>
+                    <span className="text-sm font-medium text-muted-foreground">/ month</span>
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-1">Billed monthly</p>
+                </div>
+
+                {/* Who it's for */}
+                <div className="mb-5">
+                  <div className="flex items-center gap-2 mb-2">
+                    <Target className="w-4 h-4 text-primary" />
+                    <h3 className="text-sm font-semibold text-foreground">Who it's for</h3>
+                  </div>
+                  <ul className="space-y-1">
+                    {tier.whoItsFor.map((item) => (
+                      <li key={item} className="flex items-center gap-2 text-sm text-muted-foreground">
+                        <Check className="w-3 h-3 shrink-0 text-primary/80" />
+                        {item}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+
+                {/* What it delivers */}
+                <div className="mb-5">
+                  <div className="flex items-center gap-2 mb-2">
+                    <Brain className="w-4 h-4 text-primary" />
+                    <h3 className="text-sm font-semibold text-foreground">
+                      {tier.id === "tier1" ? "What it delivers" : tier.id === "tier2" ? "What changes from Tier 1" : "What changes from Tier 2"}
+                    </h3>
+                  </div>
+                  {tier.id === "tier1" && (
+                    <p className="text-sm font-medium text-foreground mb-2">Not just "buy/sell signals."</p>
+                  )}
+                  <ul className="space-y-1">
+                    {tier.deliverables.map((item, j) => (
+                      <li
+                        key={j}
+                        className={`flex items-start gap-2 text-sm ${
+                          item.endsWith(":") || item.endsWith("PLUS:") ? "font-medium text-foreground mt-1 first:mt-0" : "text-muted-foreground"
+                        }`}
+                      >
+                        <Check className="w-3 h-3 shrink-0 text-primary/80 mt-0.5" />
+                        {item}
+                      </li>
+                    ))}
+                  </ul>
+                  {tier.id === "tier1" && (
+                    <p className="text-xs text-muted-foreground mt-2 pl-5 border-l-2 border-muted">
+                      But only for STOCKS. No options logic, expiry modeling, volatility modeling, or options pricing guidance.
+                    </p>
+                  )}
+                  {tier.id === "tier2" && (
+                    <p className="text-xs font-medium text-foreground mt-2 italic">This is not just "stocks + options."</p>
+                  )}
+                </div>
+
+                {/* Tier 1: Limitations */}
+                {tier.limitations && tier.limitations.length > 0 && (
+                  <div className="mb-5">
+                    <p className="text-xs font-medium text-muted-foreground mb-1">Limitation (framed positively)</p>
+                    <ul className="space-y-1">
+                      {tier.limitations.map((item) => (
+                        <li key={item} className="flex items-center gap-2 text-xs text-muted-foreground">
+                          <span className="w-1 h-1 rounded-full bg-muted-foreground" />
+                          {item}
+                        </li>
+                      ))}
+                    </ul>
                   </div>
                 )}
-                <h2 className="text-lg font-bold font-display text-foreground mt-1 mb-0.5">
-                  {tier.name}
-                </h2>
-                {tier.savePercent != null && (
-                  <p className="text-xs font-medium text-emerald-500/90 mb-1">
-                    Save ~{tier.savePercent}%
-                  </p>
+
+                {/* Tier 2: Upgrade psychology */}
+                {tier.upgradePsychology && (
+                  <div className="mb-5 p-3 rounded-lg bg-primary/5 border border-primary/20">
+                    <p className="text-xs font-medium text-foreground italic">"{tier.upgradePsychology}"</p>
+                  </div>
                 )}
-                <p className="text-2xl font-bold text-foreground mb-0.5">
-                  ${tier.price}
-                  <span className="text-sm font-normal text-muted-foreground"> one-time</span>
-                </p>
-                <p className="text-sm text-primary font-medium mb-0.5">
-                  {tier.credits} credits
-                </p>
-                <p className="text-xs text-muted-foreground mb-4">
-                  {tier.perCredit} credits per $
-                </p>
-                <p className="text-sm text-muted-foreground mb-4">
-                  {tier.description}
-                </p>
-                <ul className="space-y-2 mb-5">
-                  {tier.features.map((f) => (
-                    <li key={f} className="flex items-center gap-2 text-sm text-muted-foreground">
-                      <Check className="w-3.5 h-3.5 shrink-0 text-emerald-500/80" />
-                      {f}
-                    </li>
-                  ))}
-                </ul>
+
+                {/* Tier 3: Additional benefits */}
+                {tier.additionalBenefits && tier.additionalBenefits.length > 0 && (
+                  <div className="space-y-4 mb-5">
+                    {tier.additionalBenefits.map((benefit) => (
+                      <div key={benefit.title}>
+                        <div className="flex items-center gap-2 mb-1">
+                          <Sparkles className="w-4 h-4 text-primary" />
+                          <h4 className="text-sm font-semibold text-foreground">{benefit.title}</h4>
+                        </div>
+                        <ul className="space-y-1">
+                          {benefit.items.map((item) => (
+                            <li key={item} className="flex items-center gap-2 text-sm text-muted-foreground pl-6">
+                              <Check className="w-3 h-3 shrink-0 text-primary/80" />
+                              {item}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* Key framing */}
+                <div className="mb-6">
+                  <div className="flex items-center gap-2 mb-1">
+                    <KeyRound className="w-4 h-4 text-primary" />
+                    <h3 className="text-sm font-semibold text-foreground">Key framing</h3>
+                  </div>
+                  <p className="text-sm font-medium text-foreground pl-6">{tier.keyFraming}</p>
+                </div>
+
+                {/* CTA */}
                 <Button
                   variant={tier.recommended ? "default" : "outline"}
                   className={tier.recommended ? "w-full glow-button" : "w-full border-border"}
                   size="sm"
-                  onClick={() => handleBuyNow(tier)}
+                  onClick={() => handleGetStarted(tier)}
                   disabled={!!loadingTier}
                 >
-                  {loadingTier === tier.name ? "Redirecting…" : user ? "Buy now" : "Sign in to buy"}
+                  {loadingTier === tier.id
+                    ? "Redirecting…"
+                    : user
+                      ? "Get started"
+                      : "Sign in to get started"}
                 </Button>
-              </motion.div>
-            ))}
-          </div>
-        </motion.section>
+              </div>
+            </motion.div>
+          ))}
+        </div>
 
         <motion.footer
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
-          transition={{ delay: 0.3 }}
-          className="mt-auto pt-8 pb-4 text-center border-t border-border/50"
+          transition={{ delay: 0.4 }}
+          className="mt-12 pt-8 pb-4 text-center border-t border-border/50"
         >
           <Link href="/" className="inline-flex items-center justify-center gap-1.5 mt-4 text-sm text-primary hover:underline">
             <ArrowLeft className="w-3.5 h-3.5" />
