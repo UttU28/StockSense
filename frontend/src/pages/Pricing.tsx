@@ -2,7 +2,7 @@ import { useState } from "react";
 import { motion } from "framer-motion";
 import { Link, useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
-import { Check, ArrowLeft, Target, Brain, KeyRound, Sparkles } from "lucide-react";
+import { Check, ArrowLeft, Target, Brain, KeyRound } from "lucide-react";
 import { AppNavbar } from "@/components/AppNavbar";
 import { StockTicker } from "@/components/StockTicker";
 import { useAuth } from "@/contexts/AuthContext";
@@ -29,30 +29,24 @@ const tiers: TierPlan[] = [
     id: "tier1",
     name: "Tier 1",
     subtitle: "Stock Bias Engine (Version 1)",
-    aliasNames: ["Core Market Engine", "Structured Equity Plan", "Regime-Aware Stock Signals", "Foundation Plan"],
+    aliasNames: ["Core Market Engine", "Foundation Plan"],
     price: 20,
     whoItsFor: [
       "Swing traders",
       "Equity-only investors",
-      "Beginners to intermediate traders",
-      "People who don't want complexity",
+      "Beginners to intermediate",
+      "People who want simplicity",
     ],
     deliverables: [
       "Market regime assessment",
       "Trade bias (Long / Short / Skip)",
-      "When to trade / when NOT to trade",
       "Multi-timeframe validation",
       "Calendar alignment filtering",
       "Entry / invalidation levels",
       "Expected trade duration",
     ],
-    limitations: [
-      "No options strategy access",
-      "No advanced strike/expiry modeling",
-      "No personalized adaptation",
-      "Email-only support",
-    ],
-    keyFraming: "Structured Equity Execution Without Derivatives Risk",
+    limitations: ["Stocks only — no options", "Email support"],
+    keyFraming: "Structured equity execution without derivatives risk.",
   },
   {
     id: "tier2",
@@ -62,24 +56,21 @@ const tiers: TierPlan[] = [
     price: 50,
     recommended: true,
     whoItsFor: [
-      "Traders ready to use leverage",
+      "Traders ready for leverage",
       "Options traders",
-      "People who want expiry precision",
-      "Traders who understand risk modeling",
+      "Expiry & strike precision",
+      "Risk modeling experience",
     ],
     deliverables: [
-      "Everything in Tier 1 PLUS:",
-      "Options trade eligibility detection",
+      "Everything in Tier 1 plus",
+      "Options eligibility detection",
       "Expiry window modeling",
       "Strike selection logic",
-      "Bid/ask quality assessment",
-      "Spread suitability",
-      "Multi-timeframe alignment engine",
-      "Structured options duration logic",
-      "Volatility-aware execution filtering",
+      "Volatility-aware execution",
+      "Spread suitability & bid/ask quality",
     ],
-    keyFraming: "That's the mental jump.",
-    upgradePsychology: "Tier 1: “I know when to trade stocks.” → Tier 2: “I know how to structure leveraged exposure correctly.”",
+    limitations: ["Options & leverage focus", "Advanced structure"],
+    keyFraming: "Structure leveraged exposure correctly.",
   },
   {
     id: "tier3",
@@ -89,36 +80,20 @@ const tiers: TierPlan[] = [
     price: 100,
     whoItsFor: [
       "Advanced traders",
-      "High-capital traders",
-      "Business owners",
-      "People managing serious money",
-      "Traders who want personalization",
+      "High-capital / business owners",
+      "Serious money management",
+      "Personalization needs",
     ],
     deliverables: [
-      "Everything in Tier 2 PLUS:",
-      "Personalized Strategy Profile:",
-      "Risk tolerance modeling",
-      "Short vs long-term focus",
-      "Tax preference input",
-      "Capital allocation structure",
-      "Trade frequency preference",
-      "Volatility comfort level",
+      "Everything in Tier 2 plus",
+      "Personalized strategy profile",
+      "Risk tolerance & capital allocation",
+      "Allocation modulation (sizing)",
+      "Beta access & early releases",
+      "24-hour direct support",
     ],
-    keyFraming: "The system adapts output style to your profile.",
-    additionalBenefits: [
-      {
-        title: "Allocation Modulation",
-        items: ["Signals don't change — sizing guidance does. That's sophisticated."],
-      },
-      {
-        title: "Beta Access — Inner circle",
-        items: ["Early strategy patches", "New algorithm releases", "Experimental integrations", "Direct feedback loop"],
-      },
-      {
-        title: "24-Hour Direct Access — White-glove",
-        items: ["Direct communication", "Priority issue handling", "Strategy clarification", "Feedback integration"],
-      },
-    ],
+    limitations: ["Personalized profiles", "Priority & beta access"],
+    keyFraming: "Output adapts to your profile.",
   },
 ];
 
@@ -163,14 +138,14 @@ export default function Pricing() {
           </p>
         </motion.section>
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-stretch">
           {tiers.map((tier, i) => (
             <motion.div
               key={tier.id}
               initial={{ opacity: 0, y: 16 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.1 + i * 0.08, duration: 0.4 }}
-              className={`relative rounded-2xl border transition-all duration-300 overflow-hidden ${
+              className={`relative rounded-2xl border transition-all duration-300 overflow-hidden flex flex-col ${
                 tier.recommended
                   ? "border-primary/40 shadow-lg shadow-primary/10 bg-card"
                   : "border-border bg-card/80 hover:border-primary/20"
@@ -182,7 +157,7 @@ export default function Pricing() {
                 </div>
               )}
 
-              <div className={`p-6 ${tier.recommended ? "pt-10" : ""}`}>
+              <div className={`p-6 flex flex-col flex-1 min-h-0 ${tier.recommended ? "pt-10" : ""}`}>
                 {/* Header */}
                 <div className="mb-6">
                   <h2 className="text-xl font-bold font-display text-foreground">
@@ -225,15 +200,12 @@ export default function Pricing() {
                       {tier.id === "tier1" ? "What it delivers" : tier.id === "tier2" ? "What changes from Tier 1" : "What changes from Tier 2"}
                     </h3>
                   </div>
-                  {tier.id === "tier1" && (
-                    <p className="text-sm font-medium text-foreground mb-2">Not just "buy/sell signals."</p>
-                  )}
                   <ul className="space-y-1">
                     {tier.deliverables.map((item, j) => (
                       <li
                         key={j}
                         className={`flex items-start gap-2 text-sm ${
-                          item.endsWith(":") || item.endsWith("PLUS:") ? "font-medium text-foreground mt-1 first:mt-0" : "text-muted-foreground"
+                          item.toLowerCase().includes("plus") ? "font-medium text-foreground mt-1 first:mt-0" : "text-muted-foreground"
                         }`}
                       >
                         <Check className="w-3 h-3 shrink-0 text-primary/80 mt-0.5" />
@@ -241,20 +213,14 @@ export default function Pricing() {
                       </li>
                     ))}
                   </ul>
-                  {tier.id === "tier1" && (
-                    <p className="text-xs text-muted-foreground mt-2 pl-5 border-l-2 border-muted">
-                      But only for STOCKS. No options logic, expiry modeling, volatility modeling, or options pricing guidance.
-                    </p>
-                  )}
-                  {tier.id === "tier2" && (
-                    <p className="text-xs font-medium text-foreground mt-2 italic">This is not just "stocks + options."</p>
-                  )}
                 </div>
 
-                {/* Tier 1: Limitations */}
+                {/* Limitations / Note */}
                 {tier.limitations && tier.limitations.length > 0 && (
                   <div className="mb-5">
-                    <p className="text-xs font-medium text-muted-foreground mb-1">Limitation (framed positively)</p>
+                    <p className="text-xs font-medium text-muted-foreground mb-1">
+                      {tier.id === "tier1" ? "Limitation (framed positively)" : "Includes"}
+                    </p>
                     <ul className="space-y-1">
                       {tier.limitations.map((item) => (
                         <li key={item} className="flex items-center gap-2 text-xs text-muted-foreground">
@@ -263,35 +229,6 @@ export default function Pricing() {
                         </li>
                       ))}
                     </ul>
-                  </div>
-                )}
-
-                {/* Tier 2: Upgrade psychology */}
-                {tier.upgradePsychology && (
-                  <div className="mb-5 p-3 rounded-lg bg-primary/5 border border-primary/20">
-                    <p className="text-xs font-medium text-foreground italic">"{tier.upgradePsychology}"</p>
-                  </div>
-                )}
-
-                {/* Tier 3: Additional benefits */}
-                {tier.additionalBenefits && tier.additionalBenefits.length > 0 && (
-                  <div className="space-y-4 mb-5">
-                    {tier.additionalBenefits.map((benefit) => (
-                      <div key={benefit.title}>
-                        <div className="flex items-center gap-2 mb-1">
-                          <Sparkles className="w-4 h-4 text-primary" />
-                          <h4 className="text-sm font-semibold text-foreground">{benefit.title}</h4>
-                        </div>
-                        <ul className="space-y-1">
-                          {benefit.items.map((item) => (
-                            <li key={item} className="flex items-center gap-2 text-sm text-muted-foreground pl-6">
-                              <Check className="w-3 h-3 shrink-0 text-primary/80" />
-                              {item}
-                            </li>
-                          ))}
-                        </ul>
-                      </div>
-                    ))}
                   </div>
                 )}
 
@@ -304,10 +241,13 @@ export default function Pricing() {
                   <p className="text-sm font-medium text-foreground pl-6">{tier.keyFraming}</p>
                 </div>
 
+                {/* Spacer — keeps all cards same height, button aligned at bottom */}
+                <div className="flex-1 min-h-4" />
+
                 {/* CTA */}
                 <Button
-                  variant={tier.recommended ? "default" : "outline"}
-                  className={tier.recommended ? "w-full glow-button" : "w-full border-border"}
+                  variant="default"
+                  className="w-full shrink-0 glow-button"
                   size="sm"
                   onClick={() => handleGetStarted(tier)}
                   disabled={!!loadingTier}

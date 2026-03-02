@@ -230,7 +230,7 @@ export default function Home() {
           <h2 className="text-2xl md:text-4xl font-bold font-display text-foreground text-center mb-6">
             Why Most Trading Bots Fail
           </h2>
-          <ul className="space-y-3 mb-10 max-w-2xl mx-auto text-muted-foreground">
+          <ul className="space-y-3 mb-10 max-w-2xl mx-auto text-muted-foreground text-center flex flex-col items-center">
             {[
               "They trade every market regime the same way",
               "They ignore seasonal compression zones",
@@ -238,7 +238,7 @@ export default function Home() {
               "They lack higher-timeframe confirmation",
               "They overtrade during low-volatility months",
             ].map((item, i) => (
-              <li key={i} className="flex items-center gap-2">
+              <li key={i} className="flex items-center justify-center gap-2">
                 <X className="w-4 h-4 shrink-0 text-destructive/80" />
                 {item}
               </li>
@@ -318,9 +318,9 @@ export default function Home() {
             {userOutputs.map((item, i) => (
               <div
                 key={i}
-                className="flex items-start gap-2 rounded-xl border border-border bg-card/60 px-4 py-3"
+                className="flex items-center justify-center gap-2 rounded-xl border border-border bg-card/60 px-4 py-3 text-center"
               >
-                <Check className="w-5 h-5 shrink-0 text-primary mt-0.5" />
+                <Check className="w-5 h-5 shrink-0 text-primary" />
                 <span className="text-sm text-foreground">{item}</span>
               </div>
             ))}
@@ -370,9 +370,9 @@ export default function Home() {
           <p className="text-muted-foreground text-center max-w-2xl mx-auto mb-6">
             Very few systems integrate:
           </p>
-          <ul className="space-y-2 max-w-md mx-auto mb-8">
+          <ul className="space-y-2 max-w-md mx-auto mb-8 flex flex-col items-center text-center">
             {calendarFeatures.map((f) => (
-              <li key={f} className="flex items-center gap-2 text-foreground">
+              <li key={f} className="flex items-center justify-center gap-2 text-foreground">
                 <Calendar className="w-4 h-4 shrink-0 text-primary" />
                 {f}
               </li>
@@ -398,9 +398,9 @@ export default function Home() {
           <p className="text-muted-foreground text-center max-w-2xl mx-auto mb-8">
             Professionals skip trades. Amateurs force trades.
           </p>
-          <ul className="space-y-3 max-w-xl mx-auto mb-10">
+          <ul className="space-y-3 max-w-xl mx-auto mb-10 flex flex-col items-center text-center">
             {notList.map((item) => (
-              <li key={item} className="flex items-center gap-2 text-muted-foreground">
+              <li key={item} className="flex items-center justify-center gap-2 text-muted-foreground">
                 <X className="w-4 h-4 shrink-0 text-muted-foreground" />
                 It is not {item}
               </li>
